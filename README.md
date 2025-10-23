@@ -8,8 +8,6 @@ cmake ../;
 make;
 ```
 
-On Windows, use the CMake GUI to create a Visual Studio project and then build the executable in Visual Studio.
-
 
 ### USAGE
-`./qlogging <NODE_IP> <NODE_PORT> [PASSCODES] [START_TICK]`
+`./bob <config_path>`
