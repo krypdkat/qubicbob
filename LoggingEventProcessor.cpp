@@ -637,12 +637,20 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
                                 if (vle[i].getType() != 255)
                                 {
                                     dd.push_back(vle[i]);
+                                    i += 1;
                                 }
                                 else
                                 {
                                     msg = vle[i].getCustomMessage();
+                                    if (msg == CUSTOM_MESSAGE_OP_END_DISTRIBUTE_DIVIDENDS)
+                                    {
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        Logger::get()->error("Expecting OP_END_DISTRIBUTE_DIVIDENDS, but received {}", msg);
+                                    }
                                 }
-                                i += 1;
                             }
                             if (msg != CUSTOM_MESSAGE_OP_END_DISTRIBUTE_DIVIDENDS)
                             {
