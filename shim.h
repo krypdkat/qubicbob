@@ -5,7 +5,7 @@
 #define MRB_Request                (GS().MRB_Request)
 #define requestMapperFrom          (GS().requestMapperFrom)
 #define requestMapperTo            (GS().requestMapperTo)
-#define gCurrentProcessingTick     (GS().gCurrentProcessingTick)
+#define gCurrentFetchingTick     (GS().gCurrentProcessingTick)
 #define gCurrentProcessingEpoch    (GS().gCurrentProcessingEpoch)
 #define gInitialTick               (GS().gInitialTick)
 #define gCurrentLoggingEventTick   (GS().gCurrentLoggingEventTick)

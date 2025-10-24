@@ -36,14 +36,15 @@ static void KangarooTwelve64To32(void* input, void* output)
     KangarooTwelve((uint8_t*)input, 64, (uint8_t*)output, 32);
 }
 
-void computeSpectrumDigest(const uint32_t tick)
+void computeSpectrumDigest(const uint32_t tickStart, const uint32_t tickEnd)
 {
     unsigned int digestIndex;
-    if (tick != UINT32_MAX)
+    if (tickStart != UINT32_MAX)
     {
         for (digestIndex = 0; digestIndex < SPECTRUM_CAPACITY; digestIndex++)
         {
-            if (spectrum[digestIndex].latestIncomingTransferTick == tick || spectrum[digestIndex].latestOutgoingTransferTick == tick)
+            if ( ((spectrum[digestIndex].latestIncomingTransferTick >= tickStart) && (spectrum[digestIndex].latestIncomingTransferTick <= tickEnd))
+            || ((spectrum[digestIndex].latestOutgoingTransferTick >= tickStart) && (spectrum[digestIndex].latestOutgoingTransferTick <= tickEnd)))
             {
                 KangarooTwelve64To32(&spectrum[digestIndex], &spectrumDigests[digestIndex]);
                 spectrumChangeFlags[digestIndex >> 6] |= (1ULL << (digestIndex & 63));
@@ -79,10 +80,10 @@ void computeSpectrumDigest(const uint32_t tick)
     spectrumChangeFlags[0] = 0;
 }
 
-m256i getUniverseDigest(uint32_t tick)
+m256i getUniverseDigest(const uint32_t tickStart, const uint32_t tickEnd)
 {
     unsigned int digestIndex;
-    if (tick != UINT32_MAX) {
+    if (tickStart != UINT32_MAX) {
         for (digestIndex = 0; digestIndex < ASSETS_CAPACITY; digestIndex++)
         {
             if (assetChangeFlags[digestIndex >> 6] & (1ULL << (digestIndex & 63)))
@@ -310,144 +311,11 @@ static bool loadFile(const std::string& path,
 
 #define SAVE_PERIOD 1000
 
-// Compress a verified tick: pack TickData + up to 676 TickVotes into FullTickStruct,
-// store via db_insert_vtick, then delete raw TickData/TickVotes.
-void compressTick(uint32_t tick)
+void saveState(uint32_t& tracker, uint32_t lastVerified)
 {
-    // Load TickData
-    bool haveTickData = true;
-    TickData td{};
-    if (!db_get_tick_data(tick, td))
-    {
-        // empty tick
-        haveTickData = false;
-    }
-
-    // Prepare the aggregated struct
-    FullTickStruct full{};
-    std::memset((void*)&full, 0, sizeof(full));
-    if (haveTickData) std::memcpy((void*)&full.td, &td, sizeof(TickData));
-
-    // Fetch all votes for the tick (some may be missing)
-    std::vector<TickVote> votes = db_get_tick_votes(tick);
-    for (const auto& v : votes)
-    {
-        if (v.computorIndex < 676)
-        {
-            std::memcpy((void*)&full.tv[v.computorIndex], &v, sizeof(TickVote));
-        }
-    }
-
-    // Insert the compressed record
-    if (!db_insert_vtick(tick, full))
-    {
-        Logger::get()->error("compressTick: Failed to insert vtick for tick {}", tick);
-        return; // Do not delete raw data if insertion fails
-    }
-
-    // Delete raw TickData
-    if (!db_delete_tick_data(tick))
-    {
-        Logger::get()->warn("compressTick: Failed to delete TickData for tick {}", tick);
-    }
-
-    // Delete all TickVotes for this tick (attempt all indices; API treats missing as success)
-    for (uint16_t i = 0; i < 676; ++i)
-    {
-        if (!db_delete_tick_vote(tick, i))
-        {
-            Logger::get()->warn("compressTick: Failed to delete TickVote for tick {}, computor {}", tick, i);
-        }
-    }
-
-    Logger::get()->trace("compressTick: Compressed and pruned raw data for tick {}", tick);
-}
-
-static std::queue<uint32_t> gCompressQueue;
-static std::mutex gCompressMutex;
-static std::condition_variable gCompressCv;
-static std::vector<std::thread> gCompressWorkers;
-static std::once_flag gCompressInitOnce;
-static std::condition_variable gCompressDoneCv;
-static std::atomic<unsigned int> gCompressPending{0};
-static std::atomic<bool> gCompressStop{false}; // graceful shutdown flag
-
-static void initCompressionWorkers()
-{
-    unsigned int hw = std::thread::hardware_concurrency();
-    if (hw == 0) hw = 2; // conservative default
-    // Choose worker count; cap a bit to avoid overloading DB
-    const unsigned int workers = std::min<unsigned int>(hw, 16);
-
-    for (unsigned int i = 0; i < workers; ++i)
-    {
-        gCompressWorkers.emplace_back([](){
-            for (;;)
-            {
-                uint32_t tick;
-                {
-                    std::unique_lock<std::mutex> lk(gCompressMutex);
-                    gCompressCv.wait(lk, [] { return gCompressStop.load() || !gCompressQueue.empty(); });
-                    if (gCompressStop.load() && gCompressQueue.empty()) {
-                        // Stop requested and no work left.
-                        return;
-                    }
-                    tick = gCompressQueue.front();
-                    gCompressQueue.pop();
-                }
-                // Run compression outside the lock
-                compressTick(tick);
-
-                // Notify when the queue drains and no work is pending.
-                unsigned int remaining = --gCompressPending;
-                if (remaining == 0) {
-                    std::unique_lock<std::mutex> lk(gCompressMutex);
-                    if (gCompressQueue.empty()) {
-                        Logger::get()->info("Background compression finished.");
-                        gCompressDoneCv.notify_all();
-                    }
-                }
-            }
-        });
-        // no detach; we will join on shutdown
-    }
-}
-
-static inline void enqueueCompression(uint32_t tick)
-{
-    std::call_once(gCompressInitOnce, initCompressionWorkers);
-    {
-        std::lock_guard<std::mutex> lk(gCompressMutex);
-        gCompressPending++;
-        gCompressQueue.push(tick);
-    }
-    gCompressCv.notify_one();
-}
-
-// Expose a shutdown function to stop and join workers.
-void shutdownCompressionWorkers()
-{
-    {
-        std::lock_guard<std::mutex> lk(gCompressMutex);
-        gCompressStop.store(true);
-    }
-    gCompressCv.notify_all();
-
-    for (auto &t : gCompressWorkers) {
-        if (t.joinable()) t.join();
-    }
-    gCompressWorkers.clear();
-
-    // Reset for potential re-init in future runs (optional).
-    gCompressStop.store(false);
-}
-
-
-void saveStateAndCompressDB(uint32_t& lastVerifiedTick)
-{
-    Logger::get()->info("Saving verified universe/spectrum {} - Do not shutdown", gCurrentVerifyLoggingTick);
-    std::string tickSpectrum = "spectrum." + std::to_string(gCurrentVerifyLoggingTick);
-    std::string tickUniverse = "universe." + std::to_string(gCurrentVerifyLoggingTick);
+    Logger::get()->info("Saving verified universe/spectrum {} - Do not shutdown", lastVerified);
+    std::string tickSpectrum = "spectrum." + std::to_string(lastVerified);
+    std::string tickUniverse = "universe." + std::to_string(lastVerified);
 
     FILE *f = fopen(tickSpectrum.c_str(), "wb");
     if (!f) {
@@ -468,22 +336,15 @@ void saveStateAndCompressDB(uint32_t& lastVerifiedTick)
         }
         fclose(f);
     }
-    db_update_latest_verified_tick(gCurrentVerifyLoggingTick);
-    tickSpectrum = "spectrum." + std::to_string(lastVerifiedTick);
-    tickUniverse = "universe." + std::to_string(lastVerifiedTick);
+    db_update_latest_verified_tick(lastVerified);
+    tickSpectrum = "spectrum." + std::to_string(tracker);
+    tickUniverse = "universe." + std::to_string(tracker);
     if (std::filesystem::exists(tickSpectrum) && std::filesystem::exists(tickUniverse)) {
         std::filesystem::remove(tickSpectrum);
         std::filesystem::remove(tickUniverse);
     }
-    Logger::get()->info("Saved checkpoints. Deleted old verified universe/spectrum {}. "
-                        "Data Compression will run in background. "
-                        "Please wait for finish message before shutting down", lastVerifiedTick);
-    for (uint32_t tick = lastVerifiedTick + 1; tick <= gCurrentVerifyLoggingTick; tick++)
-    {
-        //compressTick(tick);
-        enqueueCompression(tick);
-    }
-    lastVerifiedTick = gCurrentVerifyLoggingTick;
+    Logger::get()->info("Saved checkpoints. Deleted old verified universe/spectrum {}. ", tracker);
+    tracker = lastVerified;
 }
 
 
@@ -500,6 +361,7 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
             spectrumFilePath = std::move(tickSpectrum);
             assetFilePath    = std::move(tickUniverse);
         } else {
+            Logger::get()->error("Cannot find snapshot files: {} and {}. bob will likely misalign and stuck", tickSpectrum, tickUniverse);
             spectrumFilePath = "spectrum." + std::to_string(gCurrentProcessingEpoch);
             assetFilePath    = "universe." + std::to_string(gCurrentProcessingEpoch);
         }
@@ -517,8 +379,8 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
         return;
     }
     gCurrentVerifyLoggingTick = lastVerifiedTick+1;
-    computeSpectrumDigest(UINT32_MAX);
-    getUniverseDigest(UINT32_MAX);
+    computeSpectrumDigest(UINT32_MAX, UINT32_MAX);
+    getUniverseDigest(UINT32_MAX, UINT32_MAX);
     while (gCurrentLoggingEventTick == gInitialTick) {
         if (stopFlag.load()) return;
         SLEEP(100);
@@ -527,13 +389,16 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
     {
         while (gCurrentVerifyLoggingTick >= gCurrentLoggingEventTick && !stopFlag.load()) SLEEP(100);
         if (stopFlag.load()) return;
+        uint32_t processFromTick = gCurrentVerifyLoggingTick;
+        uint32_t processToTick = std::min(gCurrentVerifyLoggingTick + BATCH_VERIFICATION, gCurrentLoggingEventTick - 1);
         std::vector<LogEvent> vle;
         {
             PROFILE_SCOPE("db_get_logs_by_tick_range");
-            vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, gCurrentVerifyLoggingTick, gCurrentVerifyLoggingTick);
+            vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, processFromTick, processToTick);
             // verify if we have enough logging
             long long fromId, length;
-            db_get_log_range_for_tick(gCurrentVerifyLoggingTick, fromId, length);
+            db_get_combined_log_range_for_ticks(processFromTick, processToTick, fromId, length);
+
             if (fromId != -1 && length != -1 && vle.size() != length)
             {
                 refetchFromId = fromId;
@@ -542,7 +407,7 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
                 while (!stopFlag.load())
                 {
                     SLEEP(1000);
-                    vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, gCurrentVerifyLoggingTick, gCurrentVerifyLoggingTick);
+                    vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, processFromTick, processToTick);
                     if (vle.size() == length)
                     {
                         Logger::get()->info("Successfully refetch data log {} => {}", refetchFromId, refetchToId);
@@ -569,7 +434,7 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
 
                 // If self-check fails, skip this entry and reset any pairing state to avoid
                 // dereferencing invalid bodies or headers.
-                if (!le.selfCheck(gCurrentProcessingEpoch, gCurrentVerifyLoggingTick))
+                if (!le.selfCheck(gCurrentProcessingEpoch))
                 {
                     Logger::get()->critical("Failed selfCheck in logging event");
                     ple = nullptr;
@@ -633,7 +498,7 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
                             while (msg != CUSTOM_MESSAGE_OP_END_DISTRIBUTE_DIVIDENDS && i < vle.size())
                             {
                                 // Skip any malformed entries inside the dividend window as well.
-                                if (!vle[i].selfCheck(gCurrentProcessingEpoch, gCurrentVerifyLoggingTick))
+                                if (!vle[i].selfCheck(gCurrentProcessingEpoch))
                                 {
                                     Logger::get()->critical("Failed logEvent selfCheck in dividend window");
                                     i += 1;
@@ -675,44 +540,44 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
         m256i db_spectrumDigest, spectrumDigest,  db_universeDigest, universeDigest;
         {
             PROFILE_SCOPE("computeDigests");
-            db_spectrumDigest = db_getSpectrumDigest(gCurrentVerifyLoggingTick);
+            db_spectrumDigest = db_getSpectrumDigest(processToTick);
             while (db_spectrumDigest == m256i::zero())
             {
                 if (stopFlag.load()) return;
                 SLEEP(1000);
-                db_spectrumDigest = db_getSpectrumDigest(gCurrentVerifyLoggingTick);
+                db_spectrumDigest = db_getSpectrumDigest(processToTick);
             }
-            computeSpectrumDigest(gCurrentVerifyLoggingTick);
+            computeSpectrumDigest(processFromTick, processToTick);
             spectrumDigest = spectrumDigests[(SPECTRUM_CAPACITY * 2 - 1) - 1];
             if (spectrumDigest != db_spectrumDigest)
             {
-                Logger::get()->warn("Failed spectrum digest at tick {}, please check!", gCurrentVerifyLoggingTick);
+                Logger::get()->warn("Failed spectrum digest at tick {} -> {}, please check!", processFromTick, processToTick);
                 exit(-1);
             }
 
-            db_universeDigest = db_getUniverseDigest(gCurrentVerifyLoggingTick);
+            db_universeDigest = db_getUniverseDigest(processToTick);
             while (db_universeDigest == m256i::zero())
             {
                 if (stopFlag.load()) return;
                 SLEEP(1000);
-                db_universeDigest = db_getUniverseDigest(gCurrentVerifyLoggingTick);
+                db_universeDigest = db_getUniverseDigest(processToTick);
             }
-            universeDigest = getUniverseDigest(gCurrentVerifyLoggingTick);
+            universeDigest = getUniverseDigest(processFromTick, processToTick);
         }
 
         if (universeDigest != db_universeDigest)
         {
-            Logger::get()->warn("Failed universe digest at tick {}, please check!", gCurrentVerifyLoggingTick);
+            Logger::get()->warn("Failed universe digest at tick {} -> {}, please check!", processFromTick, processToTick);
             exit(-1);
         }
         else
         {
-            Logger::get()->trace("Verified logging event tick {}", gCurrentVerifyLoggingTick);
-            if (gCurrentVerifyLoggingTick - lastVerifiedTick == SAVE_PERIOD)
+            Logger::get()->trace("Verified logging event tick {}->{}", processFromTick, processToTick);
+            if (processToTick - lastVerifiedTick >= SAVE_PERIOD)
             {
-                saveStateAndCompressDB(lastVerifiedTick);
+                saveState(lastVerifiedTick, processToTick);
             }
-            gCurrentVerifyLoggingTick++;
+            gCurrentVerifyLoggingTick = processToTick + 1;
         }
     }
     Logger::get()->info("verifyLoggingEvent stopping gracefully.");
@@ -721,9 +586,7 @@ void verifyLoggingEvent(std::atomic_bool& stopFlag)
 // The logging fetcher thread: uses its own connection, shares DB with other threads.
 void LoggingEventRequestThread(ConnectionPool& conn, std::atomic_bool& stopFlag, std::chrono::milliseconds requestCycle, uint32_t futureOffset)
 {
-    auto idleBackoff = 50ms;         // Start at 50ms
-    constexpr auto minBackoff = 5ms; // Lower bound
-    constexpr auto maxBackoff = 500ms; // Upper bound
+    auto idleBackoff = 10ms;
 
     while (!stopFlag.load(std::memory_order_relaxed)) {
         bool advancedTick = false; // "working" if we managed to advance the tick this loop
@@ -749,7 +612,7 @@ void LoggingEventRequestThread(ConnectionPool& conn, std::atomic_bool& stopFlag,
                 }
                 SLEEP(100);
             }
-            while (gCurrentLoggingEventTick >= gCurrentProcessingTick && !stopFlag.load(std::memory_order_relaxed)) SLEEP(100);
+            while (gCurrentLoggingEventTick >= gCurrentFetchingTick && !stopFlag.load(std::memory_order_relaxed)) SLEEP(100);
             if (stopFlag.load(std::memory_order_relaxed)) break;
             if (!db_check_log_range(gCurrentLoggingEventTick))
             {
@@ -771,7 +634,6 @@ void LoggingEventRequestThread(ConnectionPool& conn, std::atomic_bool& stopFlag,
                 {
                     Logger::get()->trace("Tick {} doesn't generate any log. Advancing logEvent tick", gCurrentLoggingEventTick);
                     gCurrentLoggingEventTick++;
-                    idleBackoff = std::max(std::chrono::milliseconds(idleBackoff) - 5ms, minBackoff);
                     continue;
                 }
                 long long endId = fromId + length - 1; // inclusive
@@ -817,16 +679,6 @@ void LoggingEventRequestThread(ConnectionPool& conn, std::atomic_bool& stopFlag,
                     conn.sendWithPasscodeToRandom((uint8_t *) &packet, 8, packet.header.size());
                 }
             }
-
-            // Dynamic auto-scaling backoff: tighten when "working", relax when "idle"
-            if (advancedTick) {
-                // Progress made: reduce by 5ms down to minBackoff
-                idleBackoff = std::max(std::chrono::milliseconds(idleBackoff) - 5ms, minBackoff);
-            } else {
-                // No progress: increase by 5ms up to maxBackoff
-                idleBackoff = std::min(std::chrono::milliseconds(idleBackoff) + 5ms, maxBackoff);
-            }
-
             SLEEP(idleBackoff);
         } catch (std::logic_error &ex) {
 

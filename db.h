@@ -174,7 +174,7 @@ public:
     }
 
     // Validates basic invariants against expected epoch/tick and size consistency.
-    bool selfCheck(uint16_t epoch_, uint32_t tick_) const
+    bool selfCheck(uint16_t epoch_) const
     {
         if (content.size() < 8 + PackedHeaderSize)
         {
@@ -182,9 +182,9 @@ public:
             return false;
         }
         // Basic invariants:
-        if (getEpoch() != epoch_ || getTick() != tick_) {
+        if (getEpoch() != epoch_) {
             Logger::get()->critical
-            ("One Logging Event record is broken: expect epoch {} get {} | tick {} get {}", epoch_, getEpoch(), tick_, getTick());
+            ("One Logging Event record is broken: expect epoch {} get {}", epoch_, getEpoch());
             return false;
         }
         const auto sz = getLogSize();
@@ -504,3 +504,5 @@ bool db_get_indexed_tx(const char* tx_hash,
 
 
 bool db_add_indexer(const std::string &key, uint32_t tickNumber);
+
+bool db_get_combined_log_range_for_ticks(uint32_t startTick, uint32_t endTick, long long &fromLogId, long long &length);

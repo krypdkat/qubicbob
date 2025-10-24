@@ -246,6 +246,37 @@ bool db_get_log_range_for_tick(uint32_t tick, long long& fromLogId, long long& l
     }
 }
 
+bool
+db_get_combined_log_range_for_ticks(uint32_t startTick, uint32_t endTick, long long &fromLogId, long long &length) {
+    fromLogId = -1;
+    length = -1;
+    if (!g_redis || startTick > endTick) return false;
+
+    long long minId = LLONG_MAX;
+    long long maxId = -1;
+
+    for (uint32_t tick = startTick; tick <= endTick; tick++) {
+        long long tickFromId, tickLength;
+        if (!db_get_log_range_for_tick(tick, tickFromId, tickLength)) {
+            continue;
+        }
+        if (tickFromId != -1 && tickLength != -1) {
+            minId = std::min(minId, tickFromId);
+            maxId = std::max(maxId, tickFromId + tickLength);
+        }
+    }
+
+    if (minId == LLONG_MAX || maxId == -1) {
+        fromLogId = -1;
+        length = -1;
+    } else {
+        fromLogId = minId;
+        length = maxId - minId;
+    }
+
+    return true;
+}
+
 bool db_update_latest_tick_and_epoch(uint32_t tick, uint16_t epoch) {
     if (!g_redis) return false;
     try {
@@ -553,7 +584,7 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                     if (t < start_tick || t > end_tick) continue;
 
                     // Optional strict self-check against expected tick
-                    if (!le.selfCheck(epoch, t)) continue;
+                    if (!le.selfCheck(epoch)) continue;
 
                     out.emplace_back(std::move(le));
                 }
@@ -735,13 +766,42 @@ bool db_has_tick_data(uint32_t tick) {
     return false;
 }
 
+std::vector<TickVote> db_get_tick_votes_from_vtick(uint32_t tick) {
+    std::vector<TickVote> votes;
+    if (!g_redis) return votes;
+
+    try {
+        FullTickStruct fts;
+        if (!db_get_vtick(tick, fts)) {
+            return votes;
+        }
+
+        for (const auto &vote: fts.tv) {
+            votes.push_back(vote);
+        }
+        return votes;
+    } catch (const std::exception &e) {
+        Logger::get()->error("Error in db_get_tick_votes_from_vtick: {}\n", e.what());
+        votes.clear();
+        return votes;
+    }
+}
+
+std::vector<TickVote> db_try_to_get_votes(uint32_t tick) {
+    std::vector<TickVote> votes = db_get_tick_votes_from_vtick(tick);
+    if (votes.empty()) {
+        votes = db_get_tick_votes(tick);
+    }
+    return votes;
+}
+
 struct VoteCluster {
     m256i prevSpectrumDigest;
     std::vector<TickVote> votes;
 };
 
 m256i db_getSpectrumDigest(uint32_t tick) {
-    std::vector<TickVote> votes = db_get_tick_votes(tick + 1);
+    std::vector<TickVote> votes = db_try_to_get_votes(tick + 1);
     if (votes.empty()) {
         return m256i{}; // Return zero digest if no votes
     }
@@ -783,7 +843,7 @@ m256i db_getSpectrumDigest(uint32_t tick) {
 }
 
 m256i db_getUniverseDigest(uint32_t tick) {
-    std::vector<TickVote> votes = db_get_tick_votes(tick + 1);
+    std::vector<TickVote> votes = db_try_to_get_votes(tick + 1);
     if (votes.empty()) {
         return m256i{}; // Return zero digest if no votes
     }

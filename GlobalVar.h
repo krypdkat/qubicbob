@@ -9,7 +9,7 @@
 #include <thread>
 
 struct GlobalState {
-    MutexRoundBuffer MRB_Data{256 * 1024u * 1024u};
+    MutexRoundBuffer MRB_Data{512 * 1024u * 1024u};
     MutexRoundBuffer MRB_Request{128u * 1024u * 1024u};
     RequestMap requestMapperFrom;
     RequestMap requestMapperTo;
@@ -42,7 +42,7 @@ struct GlobalState {
 GlobalState& GS();
 
 #define SLEEP(x) std::this_thread::sleep_for(std::chrono::milliseconds(x))
-
+#define BATCH_VERIFICATION 64
 #define QU_TRANSFER 0
 #define ASSET_ISSUANCE 1
 #define ASSET_OWNERSHIP_CHANGE 2

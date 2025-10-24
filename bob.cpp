@@ -22,7 +22,6 @@ void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopF
 void DataProcessorThread(std::atomic_bool& exitFlag);
 void RequestProcessorThread(std::atomic_bool& exitFlag);
 void verifyLoggingEvent(std::atomic_bool& stopFlag);
-void shutdownCompressionWorkers();
 void indexVerifiedTicks(std::atomic_bool& stopFlag);
 std::atomic_bool stopFlag{false};
 
@@ -101,12 +100,12 @@ int runBob(int argc, char *argv[])
         uint32_t tick;
         uint16_t epoch;
         db_get_latest_tick_and_epoch(tick, epoch);
-        gCurrentProcessingTick = tick;
+        gCurrentFetchingTick = tick;
         gCurrentProcessingEpoch = epoch;
         uint16_t event_epoch;
         db_get_latest_event_tick_and_epoch(tick, event_epoch);
         gCurrentLoggingEventTick = tick;
-        Logger::get()->info("Loaded DB. DATA: Tick: {} | epoch: {}", gCurrentProcessingTick.load(), gCurrentProcessingEpoch.load());
+        Logger::get()->info("Loaded DB. DATA: Tick: {} | epoch: {}", gCurrentFetchingTick.load(), gCurrentProcessingEpoch.load());
         Logger::get()->info("Loaded DB. EVENT: Tick: {} | epoch: {}", gCurrentLoggingEventTick.load(), event_epoch);
     }
     // Collect endpoints from config
@@ -192,10 +191,10 @@ int runBob(int argc, char *argv[])
                 conn->doHandshake();
                 conn->getTickInfo(initTick, initEpoch);
                 gInitialTick = initTick;
-                if (initTick > gCurrentProcessingTick.load())
+                if (initTick > gCurrentFetchingTick.load())
                 {
-                    Logger::get()->warn("Initial tick from node {} is greater than local leading tick: {} vs {}", ip, initTick, gCurrentProcessingTick.load());
-                    gCurrentProcessingTick = initTick;
+                    Logger::get()->warn("Initial tick from node {} is greater than local leading tick: {} vs {}", ip, initTick, gCurrentFetchingTick.load());
+                    gCurrentFetchingTick = initTick;
                 }
                 if (initTick > gCurrentLoggingEventTick.load())
                 {
@@ -304,16 +303,16 @@ int runBob(int argc, char *argv[])
     const long long sleep_time = 5;
     while (!stopFlag.load())
     {
-        float fetching_td_speed = (prevFetchingTickData == 0) ? 0: float(gCurrentProcessingTick.load() - prevFetchingTickData) / sleep_time;
+        float fetching_td_speed = (prevFetchingTickData == 0) ? 0: float(gCurrentFetchingTick.load() - prevFetchingTickData) / sleep_time;
         float fetching_le_speed = (prevLoggingEventTick == 0) ? 0: float(gCurrentLoggingEventTick.load() - prevLoggingEventTick) / sleep_time;
         float verify_le_speed = (prevVerifyEventTick == 0) ? 0: float(gCurrentVerifyLoggingTick.load() - prevVerifyEventTick) / sleep_time;
         float indexing_speed = (prevIndexingTick == 0) ? 0: float(gCurrentIndexingTick.load() - prevIndexingTick) / sleep_time;
-        prevFetchingTickData = gCurrentProcessingTick.load();
+        prevFetchingTickData = gCurrentFetchingTick.load();
         prevLoggingEventTick = gCurrentLoggingEventTick.load();
         prevVerifyEventTick = gCurrentVerifyLoggingTick.load();
         prevIndexingTick = gCurrentIndexingTick.load();
         Logger::get()->info("Current state: TickData: {} ({}) | LogEvent: {} ({}) | Indexing: {} ({}) | Verifying: {} ({})",
-                            gCurrentProcessingTick.load(), fetching_td_speed,
+                            gCurrentFetchingTick.load(), fetching_td_speed,
                             gCurrentLoggingEventTick.load(), fetching_le_speed,
                             gCurrentIndexingTick.load(), indexing_speed,
                             gCurrentVerifyLoggingTick.load(), verify_le_speed);
@@ -359,8 +358,6 @@ int runBob(int argc, char *argv[])
 
     for (auto& thr : v_data_thread) thr.join();
     Logger::get()->info("Exited data threads");
-
-    shutdownCompressionWorkers();
     db_close();
 
     // Stop embedded server (if it was started) before shutting down logger

@@ -94,7 +94,6 @@ QubicConnection::~QubicConnection()
 int QubicConnection::receiveData(uint8_t* buffer, int sz)
 {
     int count = 0;
-    bool showProgress = (sz > 50000);
     double orgSize = sz;
     while (sz > 0)
     {
@@ -109,10 +108,6 @@ int QubicConnection::receiveData(uint8_t* buffer, int sz)
         }
         count += ret;
         sz -= ret;
-        if (showProgress)
-        {
-            Logger::get()->info("\rProgress %.4f %%", double(count)/orgSize*100);
-        }
     }
 	return count;
 }

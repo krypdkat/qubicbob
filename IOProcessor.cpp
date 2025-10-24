@@ -20,11 +20,20 @@ using namespace std::chrono_literals;
 // - have tick data
 // - have enough txs
 // - quorum reach in tick votes
-bool verifyQuorum(uint32_t tick, bool& needFetchVote)
+bool verifyQuorum(uint32_t tick, TickData& td, std::vector<TickVote>& votes)
 {
-    needFetchVote = true;
-    std::vector<TickVote> vtv = db_get_tick_votes(tick);
-    if (vtv.size() < 225) {
+    // check and fetch more votes
+    int count = 0;
+    for (int i = 0; i < 676; i++)
+    {
+        auto& vote = votes[i];
+        if (vote.tick != tick)
+        {
+            db_get_tick_vote(tick, i, vote);
+        }
+        if (vote.tick == tick && vote.epoch == gCurrentProcessingEpoch) count++;
+    }
+    if (count < 225) {
         return false;
     }
     struct ConsensusData
@@ -52,7 +61,7 @@ bool verifyQuorum(uint32_t tick, bool& needFetchVote)
 
     };
     std::map<ConsensusData, int> digestCount;
-    for (const auto &vote: vtv) {
+    for (const auto &vote: votes) {
         ConsensusData cd{};
         cd.prevResourceTestingDigest = vote.prevResourceTestingDigest;
         cd.prevTransactionBodyDigest = vote.prevTransactionBodyDigest;
@@ -77,7 +86,6 @@ bool verifyQuorum(uint32_t tick, bool& needFetchVote)
     {
         if (maxCount > 225)
         {
-            needFetchVote = false;
             return true;
         }
         else
@@ -86,9 +94,14 @@ bool verifyQuorum(uint32_t tick, bool& needFetchVote)
         }
     }
     else if (maxCount < 451) return false; // not yet collect enough data for non empty tick
-    needFetchVote = false;
-    TickData td{};
-    if (!db_get_tick_data(tick, td))
+    if (td.tick != tick || td.epoch != gCurrentProcessingEpoch)
+    {
+        if (!db_get_tick_data(tick, td))
+        {
+            return false;
+        }
+    }
+    if (td.tick != tick || td.epoch != gCurrentProcessingEpoch)
     {
         return false;
     }
@@ -101,7 +114,6 @@ bool verifyQuorum(uint32_t tick, bool& needFetchVote)
             std::string hash_str(qhash);
             if (!db_check_transaction_exist(hash_str))
             {
-//                Logger::get()->info("Verifying tick {}: Missing Tx", tick);
                 return false;
             }
         }
@@ -113,7 +125,7 @@ bool verifyQuorum(uint32_t tick, bool& needFetchVote)
     {
         Logger::get()->critical("Consensus error: tickData {} is mismatched (there are potentially 2 tick data)", td.tick);
     }
-    return maxCount >= 451; // quorum reach
+    return true; // quorum reach
 }
 
 // Requester thread: periodically evaluates what to request next and sends requests over the connection.
@@ -126,6 +138,8 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
     auto requestClock = std::chrono::high_resolution_clock::now() - requestCycle;
     while (!stopFlag.load(std::memory_order_relaxed)) {
         try {
+            /* Don't need to fetch too far if not yet verifying*/
+            while (gCurrentFetchingTick > gCurrentVerifyLoggingTick + 1000 && !stopFlag.load(std::memory_order_relaxed)) SLEEP(100);
             auto now = std::chrono::high_resolution_clock::now();
             if (now - requestClock >= requestCycle)
             {
@@ -133,7 +147,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
                 for (uint32_t offset = 0; offset < futureOffset; offset++) {
                     bool have_next_td = false;
                     {
-                        if (!db_has_tick_data(gCurrentProcessingTick + offset))
+                        if (!db_has_tick_data(gCurrentFetchingTick + offset))
                         {
                             // request if this tick doesn't exist
                             struct {
@@ -143,7 +157,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
                             pl.header.setSize(sizeof(pl));
                             pl.header.setType(16);
                             pl.header.randomizeDejavu();
-                            pl.tick = gCurrentProcessingTick  + offset;
+                            pl.tick = gCurrentFetchingTick + offset;
                             conn_pool.sendToMany((uint8_t *) &pl, sizeof(pl), 1);
                         } else {
                             have_next_td = true;
@@ -160,10 +174,10 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
                         pl.header.setSize(sizeof(pl));
                         pl.header.setType(14);
                         pl.header.randomizeDejavu();
-                        pl.tick = gCurrentProcessingTick  + offset;
+                        pl.tick = gCurrentFetchingTick + offset;
                         memset(pl.voteFlags, 0, sizeof(pl.voteFlags));
                         int count = 0;
-                        auto tvs = db_get_tick_votes(gCurrentProcessingTick + offset);
+                        auto tvs = db_get_tick_votes(gCurrentFetchingTick + offset);
                         for (auto& tv: tvs) {
                             int i = tv.computorIndex;
                             pl.voteFlags[i >> 3] |= (1 << (i & 7)); // turn on the flag if the vote exists
@@ -179,7 +193,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
                         // transactions: requires to have tickdata
                         if (have_next_td) {
                             TickData td{};
-                            db_get_tick_data(gCurrentProcessingTick + offset, td);
+                            db_get_tick_data(gCurrentFetchingTick + offset, td);
                             struct {
                                 RequestResponseHeader header;
                                 unsigned int tick;
@@ -189,7 +203,7 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
                             pl.header.setSize(sizeof(pl));
                             pl.header.setType(29);
                             pl.header.randomizeDejavu();
-                            pl.tick = gCurrentProcessingTick + offset;
+                            pl.tick = gCurrentFetchingTick + offset;
                             memset(pl.flag, 0, sizeof(pl.flag));
                             int count = 0;
                             for (unsigned int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
@@ -220,25 +234,73 @@ void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std:
     }
 }
 
+// Compress a verified tick: pack TickData + up to 676 TickVotes into FullTickStruct,
+// store via db_insert_vtick, then delete raw TickData/TickVotes.
+static void compressTick(uint32_t tick, TickData td, std::vector<TickVote> votes)
+{
+    bool haveTickData = td.tick == tick && td.epoch == gCurrentProcessingEpoch;
+    // Load TickData
+    // Prepare the aggregated struct
+    FullTickStruct full{};
+    std::memset((void*)&full, 0, sizeof(full));
+    if (haveTickData) std::memcpy((void*)&full.td, &td, sizeof(TickData));
+
+    for (const auto& v : votes)
+    {
+        if (v.computorIndex < 676 && v.epoch != 0)
+        {
+            std::memcpy((void*)&full.tv[v.computorIndex], &v, sizeof(TickVote));
+        }
+    }
+
+    // Insert the compressed record
+    if (!db_insert_vtick(tick, full))
+    {
+        Logger::get()->error("compressTick: Failed to insert vtick for tick {}", tick);
+        return; // Do not delete raw data if insertion fails
+    }
+
+    // Delete raw TickData
+    if (!db_delete_tick_data(tick))
+    {
+        Logger::get()->warn("compressTick: Failed to delete TickData for tick {}", tick);
+    }
+
+    // Delete all TickVotes for this tick (attempt all indices; API treats missing as success)
+    for (uint16_t i = 0; i < 676; ++i)
+    {
+        if (!db_delete_tick_vote(tick, i))
+        {
+            Logger::get()->warn("compressTick: Failed to delete TickVote for tick {}, computor {}", tick, i);
+        }
+    }
+
+    Logger::get()->trace("compressTick: Compressed and pruned raw data for tick {}", tick);
+}
+
 void IOVerifyThread(std::atomic_bool& stopFlag)
 {
-    bool ignore;
     const auto idleBackoff = 10ms;
+    TickData td{};
+    std::vector<TickVote> votes;
+    votes.resize(676);
+    memset(votes.data(), 0, votes.size() * sizeof(TickVote));
     while (!stopFlag.load())
     {
-        if (!verifyQuorum(gCurrentProcessingTick, ignore))
+        if (!verifyQuorum(gCurrentFetchingTick, td, votes))
         {
             std::this_thread::sleep_for(idleBackoff);
         }
         else
         {
-            auto current_tick = gCurrentProcessingTick.load();
-            db_update_latest_tick_and_epoch(gCurrentProcessingTick, gCurrentProcessingEpoch);
-            Logger::get()->trace("Progress ticking from {} to {}", gCurrentProcessingTick.load(), gCurrentProcessingTick.load() + 1);
+            auto current_tick = gCurrentFetchingTick.load();
+            std::thread(compressTick, current_tick, td, votes).detach();
+            db_update_latest_tick_and_epoch(gCurrentFetchingTick, gCurrentProcessingEpoch);
+            Logger::get()->trace("Progress ticking from {} to {}", gCurrentFetchingTick.load(), gCurrentFetchingTick.load() + 1);
             uint32_t tmp_tick;
             uint16_t tmp_epoch;
             db_get_latest_tick_and_epoch(tmp_tick, tmp_epoch);
-            if (current_tick == tmp_tick) gCurrentProcessingTick++;
+            if (current_tick == tmp_tick) gCurrentFetchingTick++;
         }
     }
 }
