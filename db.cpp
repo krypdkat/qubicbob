@@ -462,58 +462,15 @@ long long db_get_latest_verified_tick() {
     return -1;
 }
 
-
-static bool fill_log_from_key_and_fields(const std::string& key, LogEvent& log) {
-    // NOTE: Optimized: this function no longer performs Redis calls.
-    // It only parses the key and expects caller to provide fields via the new overload.
-    std::vector<std::string> parts;
-    std::stringstream ss(key);
-    std::string part;
-    while(getline(ss, part, ':')) {
-        parts.push_back(part);
-    }
-
-    if (parts.size() != 3 || parts[0] != "log") return false;
-
-    // Build a minimal header; epoch and logId are available in the key.
-    // Tick and type will be filled by the caller-aware overload.
-    try {
-        // just validate numbers here; actual header assembly is done in the overload
-        (void)std::stoi(parts[1]);
-        (void)std::stoull(parts[2]);
-    } catch(const std::logic_error& e) {
-        Logger::get()->warn("Failed to parse log key '%s': %s", key.c_str(), e.what());
-        return false;
-    }
-
-    // Reset content; the overload will construct full header+payload.
-    log.clear();
-
-    return true;
-}
-
-// Overload that uses pre-fetched fields to complete the LogEvent.
-// Requires caller to provide the tick (known when iterating per-tick index).
 static bool fill_log_from_key_and_fields(const std::string& key,
                                          const std::vector<sw::redis::Optional<std::string>>& vals,
-                                         uint32_t tick_value,
                                          LogEvent& log) {
-    if (!fill_log_from_key_and_fields(key, log)) return false;
 
     try {
         if (!(vals.size() == 1 && vals[0])) {
             Logger::get()->warn("Could not retrieve content for log key {}", key.c_str());
             return false;
         }
-
-        // Parse epoch and logId from key
-        std::vector<std::string> parts;
-        {
-            std::stringstream ss(key);
-            std::string part;
-            while(getline(ss, part, ':')) parts.push_back(part);
-        }
-        if (parts.size() != 3) return false;
         // Assemble packed buffer: header (26 bytes) + payload
         const std::string& payload = *vals[0];
         log.updateContent((uint8_t*)payload.data(),payload.size());
@@ -535,7 +492,7 @@ bool db_get_log(uint16_t epoch, uint64_t logId, LogEvent &log)
         g_redis->hmget(key, {"content"}, std::back_inserter(vals));
 
         // Pass a dummy tick value since it's not used in this context
-        return fill_log_from_key_and_fields(key, vals, 0, log);
+        return fill_log_from_key_and_fields(key, vals, log);
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_get_log: %s\n", e.what());
         return false;
@@ -574,19 +531,21 @@ std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_t
                     keys.emplace_back("log:" + std::to_string(epoch) + ":" + std::to_string(id));
                 }
 
-                // Pipeline HMGET for "content" for each key
-                auto pipe = g_redis->pipeline();
-                for (const auto& k : keys) {
-                    pipe.hmget(k, fields.begin(), fields.end());
-                }
-                auto replies = pipe.exec();
+                // Fetch contents via MGET in one round-trip
+                std::vector<sw::redis::OptionalString> vals;
+                vals.reserve(keys.size());
+                g_redis->mget(keys.begin(), keys.end(), std::back_inserter(vals));
 
                 // Extract and assemble LogEvent entries
                 for (size_t i = 0; i < keys.size(); ++i) {
                     try {
-                        auto vals = replies.get<std::vector<sw::redis::OptionalString>>(static_cast<int>(i));
+                        const auto &opt = vals[i];
+                        if (!opt) continue;
+
+                        // Reuse existing helper by wrapping the single value
+                        std::vector<sw::redis::OptionalString> singleField{opt};
                         LogEvent completed;
-                        if (fill_log_from_key_and_fields(keys[i], vals, tick, completed)) {
+                        if (fill_log_from_key_and_fields(keys[i], singleField, completed)) {
                             logs.push_back(std::move(completed));
                         }
                     } catch (...) {

@@ -40,14 +40,7 @@ void computeSpectrumDigest(const uint32_t tick)
     unsigned int digestIndex;
     if (tick != UINT32_MAX)
     {
-        for (digestIndex = 0; digestIndex < SPECTRUM_CAPACITY; digestIndex++)
-        {
-            if (spectrum[digestIndex].latestIncomingTransferTick == tick || spectrum[digestIndex].latestOutgoingTransferTick == tick)
-            {
-                KangarooTwelve64To32(&spectrum[digestIndex], &spectrumDigests[digestIndex]);
-                spectrumChangeFlags[digestIndex >> 6] |= (1ULL << (digestIndex & 63));
-            }
-        }
+        // pass
     }
     else
     {
