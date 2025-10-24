@@ -40,19 +40,6 @@ void db_connect(const std::string& connectionString) {
 
         g_redis = std::make_unique<sw::redis::Redis>(uri_with_pool);
         g_redis->ping();
-
-        // Verify RedisTimeSeries (TS.* commands) is available.
-        // We probe with TS.INFO on a dummy key; if the module is missing, Redis returns "unknown command".
-        try {
-            g_redis->command<void>("TS.INFO", "bob_ts_probe_dummy_key");
-        } catch (const sw::redis::ReplyError& e) {
-            const std::string msg = e.what();
-            if (msg.find("unknown command") != std::string::npos) {
-                Logger::get()->critical("RedisTimeSeries module not loaded. Please load RedisTimeSeries (TS.*) before running.");
-                std::exit(2);
-            }
-            // If it's a different error (e.g., key not found), that's fine — the module exists.
-        }
     } catch (const sw::redis::Error& e) {
         g_redis.reset();
         throw std::runtime_error("Cannot connect to Redis: " + std::string(e.what()));
@@ -113,11 +100,11 @@ bool db_insert_log(uint16_t epoch, uint32_t tick, uint64_t logId, int logSize, c
     if (!g_redis) return false;
     try {
         std::string key = "log:" +
-                std::to_string(epoch) + ":" +
-                std::to_string(logId);
-        std::unordered_map<std::string, std::string> fields;
-        fields["content"] = std::string(reinterpret_cast<const char*>(content), logSize);
-        g_redis->hmset(key, fields.begin(), fields.end());
+                          std::to_string(epoch) + ":" +
+                          std::to_string(logId);
+        // Store the raw log bytes directly as the key value instead of using a hash field.
+        sw::redis::StringView val(reinterpret_cast<const char*>(content), static_cast<size_t>(logSize));
+        g_redis->set(key, val);
         // Removed: stop tracking per-tick log index (log_index:<epoch>:<tick>)
         // std::string index_key = "log_index:" + std::to_string(epoch) + ":" + std::to_string(tick);
         // g_redis->sadd(index_key, key);
@@ -127,8 +114,6 @@ bool db_insert_log(uint16_t epoch, uint32_t tick, uint64_t logId, int logSize, c
     }
     return true;
 }
-
-
 
 bool db_insert_log_range(uint32_t tick, const ResponseAllLogIdRangesFromTick& logRange) {
     if (!g_redis) return false;
@@ -483,83 +468,108 @@ static bool fill_log_from_key_and_fields(const std::string& key,
     return false;
 }
 
-bool db_get_log(uint16_t epoch, uint64_t logId, LogEvent &log)
-{
+bool db_get_log(uint16_t epoch, uint64_t logId, LogEvent &log) {
     if (!g_redis) return false;
+    log.clear();
     try {
         std::string key = "log:" + std::to_string(epoch) + ":" + std::to_string(logId);
-        std::vector<sw::redis::Optional<std::string>> vals;
-        g_redis->hmget(key, {"content"}, std::back_inserter(vals));
+        auto val = g_redis->get(key);
+        if (!val) {
+            return false;
+        }
+        // Store raw bytes directly into LogEvent
+        log.updateContent(reinterpret_cast<const uint8_t*>(val->data()), static_cast<int>(val->size()));
 
-        // Pass a dummy tick value since it's not used in this context
-        return fill_log_from_key_and_fields(key, vals, log);
+        // Basic sanity: header must exist and match epoch/logId
+        if (!log.hasPackedHeader()) {
+            Logger::get()->warn("db_get_log: value too small for header at key {}", key);
+            return false;
+        }
+        if (log.getEpoch() != epoch || log.getLogId() != logId) {
+            Logger::get()->warn("db_get_log: header mismatch for key {}, got epoch {}, logId {}", key, log.getEpoch(), log.getLogId());
+            // Not fatal, but indicate bad record
+            return false;
+        }
+        return true;
     } catch (const sw::redis::Error &e) {
         Logger::get()->error("Redis error in db_get_log: %s\n", e.what());
         return false;
     }
-    return false;
 }
 
+
 std::vector<LogEvent> db_get_logs_by_tick_range(uint16_t epoch, uint32_t start_tick, uint32_t end_tick) {
-    std::vector<LogEvent> logs;
-    if (!g_redis) return logs;
+    std::vector<LogEvent> out;
+    if (!g_redis) return out;
 
     try {
-        constexpr int BATCH_SIZE = 128;
-        static const std::array<std::string, 1> fields = {"content"};
+        // We rely on the aggregated range for each tick in [start_tick, end_tick].
+        // For each tick, read tick_log_range:<tick> which stores (fromLogId, length) in the new compact format,
+        // then fetch logs "log:<epoch>:<logId>" for that contiguous id range.
+        const std::size_t kChunkSize = 1024;
 
         for (uint32_t tick = start_tick; tick <= end_tick; ++tick) {
             long long fromLogId = -1;
             long long length = -1;
             if (!db_get_log_range_for_tick(tick, fromLogId, length)) {
-                // No range available or error — skip this tick
+                // On parsing/redis error: skip this tick.
                 continue;
             }
             if (fromLogId == -1 || length == -1 || length == 0) {
-                // No logs for this tick
+                // No logs for this tick; continue.
                 continue;
             }
 
-            const long long toLogId = fromLogId + length; // exclusive upper bound
-            for (long long start = fromLogId; start < toLogId; start += BATCH_SIZE) {
-                const long long stop = std::min(toLogId, start + static_cast<long long>(BATCH_SIZE));
+            // Fetch in chunks to avoid oversized commands.
+            const uint64_t startId = static_cast<uint64_t>(fromLogId);
+            const uint64_t endId = static_cast<uint64_t>(fromLogId + length - 1);
 
-                // Build keys for this slice: "log:<epoch>:<logId>"
+            uint64_t cur = startId;
+            while (cur <= endId) {
+                // Build a chunk of keys
                 std::vector<std::string> keys;
-                keys.reserve(static_cast<size_t>(stop - start));
-                for (long long id = start; id < stop; ++id) {
-                    keys.emplace_back("log:" + std::to_string(epoch) + ":" + std::to_string(id));
+                keys.reserve(kChunkSize);
+                for (std::size_t i = 0; i < kChunkSize && cur <= endId; ++i, ++cur) {
+                    keys.emplace_back("log:" + std::to_string(epoch) + ":" + std::to_string(cur));
                 }
 
-                // Fetch contents via MGET in one round-trip
-                std::vector<sw::redis::OptionalString> vals;
-                vals.reserve(keys.size());
+                // Bulk-get
+                std::vector<sw::redis::Optional<std::string>> vals;
                 g_redis->mget(keys.begin(), keys.end(), std::back_inserter(vals));
 
-                // Extract and assemble LogEvent entries
-                for (size_t i = 0; i < keys.size(); ++i) {
-                    try {
-                        const auto &opt = vals[i];
-                        if (!opt) continue;
+                // Convert to LogEvent and filter by header
+                for (std::size_t i = 0; i < vals.size(); ++i) {
+                    if (!vals[i]) continue;
 
-                        // Reuse existing helper by wrapping the single value
-                        std::vector<sw::redis::OptionalString> singleField{opt};
-                        LogEvent completed;
-                        if (fill_log_from_key_and_fields(keys[i], singleField, completed)) {
-                            logs.push_back(std::move(completed));
-                        }
-                    } catch (...) {
-                        // Skip malformed/errored entries
-                    }
+                    const auto& s = *vals[i];
+                    LogEvent le;
+                    le.updateContent(reinterpret_cast<const uint8_t*>(s.data()), static_cast<int>(s.size()));
+
+                    // Basic header validation and range filter
+                    if (!le.hasPackedHeader()) continue;
+                    if (le.getEpoch() != epoch) continue;
+
+                    const auto t = le.getTick();
+                    if (t < start_tick || t > end_tick) continue;
+
+                    // Optional strict self-check against expected tick
+                    if (!le.selfCheck(epoch, t)) continue;
+
+                    out.emplace_back(std::move(le));
                 }
             }
         }
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("Redis error in db_get_logs_by_tick_range: %s\n", e.what());
+        out.clear();
+    } catch (const std::exception& e) {
+        Logger::get()->error("Exception in db_get_logs_by_tick_range: %s\n", e.what());
+        out.clear();
     }
 
-    return logs;
+    return out;
 }
+
 
 long long db_get_tick_vote_count(uint32_t tick) {
     if (!g_redis) return -1;
@@ -1002,31 +1012,15 @@ bool db_add_indexer(const std::string &key, uint32_t tickNumber)
 {
     if (!g_redis) return false;
     try {
-        // Create TimeSeries if it doesn't exist
-        const char *create_script = R"lua(
-if not redis.call('EXISTS', KEYS[1]) then
-    redis.call('TS.CREATE', KEYS[1], 'DUPLICATE_POLICY', 'FIRST')
-    return 1
-end
-return 1
-)lua";
-        std::vector<std::string> keys = {key};
-        std::vector<std::string> args = {std::to_string(tickNumber)};
-        g_redis->eval<long long>(create_script, keys.begin(), keys.end(), args.begin(), args.end());
-
-        // Add the record
-        const char *add_script = R"lua(
-local ret = redis.call('TS.ADD', KEYS[1], ARGV[1], '1', 'DUPLICATE_POLICY', 'FIRST')
-return 1
-)lua";
-
-        g_redis->eval<long long>(add_script, keys.begin(), keys.end(), args.begin(), args.end());
+        const std::string member = std::to_string(tickNumber);
+        g_redis->zadd(key, member, static_cast<double>(tickNumber), sw::redis::UpdateType::NOT_EXIST);
         return true;
     } catch (const sw::redis::Error &e) {
-        Logger::get()->error("Redis error in addIndexer: {}\n", e.what());
+        Logger::get()->error("Redis error in db_add_indexer: {}\n", e.what());
         return false;
     }
 }
+
 
 // Store per-transaction index info for fast lookup by tx-hash.
 // Key is expected to be "itx:<txHash>".

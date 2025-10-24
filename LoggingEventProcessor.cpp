@@ -32,7 +32,8 @@ static constexpr long long MAX_LOG_EVENT_PER_CALL = 100000;
 
 static void KangarooTwelve64To32(void* input, void* output)
 {
-    KT128((uint8_t*)input, 64, (uint8_t*)output, 32, nullptr, 0);
+//    KT128((uint8_t*)input, 64, (uint8_t*)output, 32, nullptr, 0);
+    KangarooTwelve((uint8_t*)input, 64, (uint8_t*)output, 32);
 }
 
 void computeSpectrumDigest(const uint32_t tick)
@@ -40,7 +41,14 @@ void computeSpectrumDigest(const uint32_t tick)
     unsigned int digestIndex;
     if (tick != UINT32_MAX)
     {
-        // pass
+        for (digestIndex = 0; digestIndex < SPECTRUM_CAPACITY; digestIndex++)
+        {
+            if (spectrum[digestIndex].latestIncomingTransferTick == tick || spectrum[digestIndex].latestOutgoingTransferTick == tick)
+            {
+                KangarooTwelve64To32(&spectrum[digestIndex], &spectrumDigests[digestIndex]);
+                spectrumChangeFlags[digestIndex >> 6] |= (1ULL << (digestIndex & 63));
+            }
+        }
     }
     else
     {

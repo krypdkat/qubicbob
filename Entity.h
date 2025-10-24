@@ -45,8 +45,6 @@ static void increaseEnergy(const m256i& publicKey, long long amount, uint32_t ti
             spectrum[index].incomingAmount += amount;
             spectrum[index].numberOfIncomingTransfers++;
             spectrum[index].latestIncomingTransferTick = tick;
-
-            spectrumChangeFlags[index >> 6] |= (1ULL << (index & 63));
         }
         else
         {
@@ -56,8 +54,6 @@ static void increaseEnergy(const m256i& publicKey, long long amount, uint32_t ti
                 spectrum[index].incomingAmount = amount;
                 spectrum[index].numberOfIncomingTransfers = 1;
                 spectrum[index].latestIncomingTransferTick = tick;
-
-                spectrumChangeFlags[index >> 6] |= (1ULL << (index & 63));
             }
             else
             {
@@ -78,8 +74,6 @@ static bool decreaseEnergy(const int index, long long amount, uint32_t tick)
             spectrum[index].outgoingAmount += amount;
             spectrum[index].numberOfOutgoingTransfers++;
             spectrum[index].latestOutgoingTransferTick = tick;
-
-            spectrumChangeFlags[index >> 6] |= (1ULL << (index & 63));
             return true;
         }
     }
