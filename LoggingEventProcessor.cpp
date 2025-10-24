@@ -21,13 +21,18 @@
 #include "Profiler.h"
 #include "shim.h"
 using namespace std::chrono_literals;
-
+extern "C" {
+    // declare for xkcp
+int KT128(const unsigned char *input, size_t inputByteLen,
+          unsigned char *output, size_t outputByteLen,
+          const unsigned char *customization, size_t customByteLen);
+}
 // Constants (kept local to this translation unit)
 static constexpr long long MAX_LOG_EVENT_PER_CALL = 100000;
 
 static void KangarooTwelve64To32(void* input, void* output)
 {
-    KangarooTwelve((const unsigned char*)input, 64, (unsigned char*)output, 32);
+    KT128((uint8_t*)input, 64, (uint8_t*)output, 32, nullptr, 0);
 }
 
 void computeSpectrumDigest(const uint32_t tick)
