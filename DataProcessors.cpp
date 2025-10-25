@@ -130,36 +130,36 @@ void DataProcessorThread(std::atomic_bool& exitFlag)
 {
     std::vector<uint8_t> buf;
     buf.resize(RequestResponseHeader::max_size, 0);
-    uint8_t* ptr = buf.data();
+    // Always write the packet to the start of the buffer
     while (!exitFlag.load())
     {
         uint32_t packet_size = 0;
-        MRB_Data.GetPacket(ptr, packet_size);
+        MRB_Data.GetPacket(buf.data(), packet_size);
         if (packet_size == 0 || packet_size >= RequestResponseHeader::max_size)
         {
             Logger::get()->warn("Malformed packet_size: {}", packet_size);
             continue;
         }
         RequestResponseHeader header{};
-        memcpy(&header, ptr, 8);
+        memcpy(&header, buf.data(), 8);
         auto type = header.type();
-        ptr += 8;
+        const uint8_t* payload = buf.data() + 8;
         switch (type)
         {
             case BROADCAST_TICK_VOTE: // TickVote
-                processTickVote(ptr);
+                processTickVote(const_cast<uint8_t*>(payload));
                 break;
             case TickData::type(): // TickData
-                processTickData(ptr);
+                processTickData(const_cast<uint8_t*>(payload));
                 break;
             case BROADCAST_TRANSACTION: // Transaction
-                processTransaction(ptr);
+                processTransaction(payload);
                 break;
             case RespondLog::type(): // log event
-                processLogEvent(ptr, packet_size - 8);
+                processLogEvent(payload, packet_size - 8);
                 break;
             case ResponseAllLogIdRangesFromTick::type(): // logID ranges
-                processLogRanges(header, ptr);
+                processLogRanges(header, payload);
                 break;
             default:
                 break;

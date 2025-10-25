@@ -831,15 +831,15 @@ m256i db_getSpectrumDigest(uint32_t tick) {
             maxSize = cluster.votes.size();
             result = cluster.prevSpectrumDigest;
             td = cluster.votes[0].transactionDigest;
+            if (maxSize >= 451) return result;
+            if (td == m256i::zero() && maxSize >= 226)
+            {
+                return result;
+            }
         }
     }
-
-    int threshold = 226;
-    if (td != m256i::zero())
-    {
-        threshold = 451;
-    }
-    return (maxSize >= threshold) ? result : m256i{};
+    Logger::get()->warn("Cannot obtain correct spectrum hash from quorum. Please check!");
+    return m256i{};
 }
 
 m256i db_getUniverseDigest(uint32_t tick) {
@@ -881,15 +881,15 @@ m256i db_getUniverseDigest(uint32_t tick) {
             maxSize = cluster.votes.size();
             result = cluster.prevUniverseDigest;
             td = cluster.votes[0].transactionDigest;
+            if (maxSize >= 451) return result;
+            if (td == m256i::zero() && maxSize >= 226)
+            {
+                return result;
+            }
         }
     }
-    int threshold = 226;
-    if (td != m256i::zero())
-    {
-        threshold = 451;
-    }
-    // Return result only if largest cluster has at least threshold votes
-    return (maxSize >= threshold) ? result : m256i{};
+    Logger::get()->warn("Cannot obtain correct universe hash from quorum. Please check!");
+    return m256i{};
 }
 
 // Store the whole Computors struct per epoch; key = "computor:<epoch>"
