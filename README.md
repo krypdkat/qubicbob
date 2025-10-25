@@ -1,6 +1,6 @@
 ### System Requirements:
 - cmake and clang (or gcc)
-- Redis with TimeSeries Module, 8.0.0 (or above)
+- KeyDB Engine (Check installation guide: https://github.com/krypdkat/qubicbob/blob/master/KEYDB_INSTALL.md)
 - Memory (RAM): 16 GB
 - Processor (CPU): 4 Cores (with AVX2 support)
 - Storage (Disk): 100 GB Fast SSD / NVMe
