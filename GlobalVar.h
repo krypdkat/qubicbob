@@ -75,7 +75,7 @@ struct GlobalState {
 GlobalState& GS();
 
 #define SLEEP(x) std::this_thread::sleep_for(std::chrono::milliseconds(x))
-#define BATCH_VERIFICATION 64
+#define BATCH_VERIFICATION 16
 #define QU_TRANSFER 0
 #define ASSET_ISSUANCE 1
 #define ASSET_OWNERSHIP_CHANGE 2

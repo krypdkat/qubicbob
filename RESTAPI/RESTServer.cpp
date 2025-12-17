@@ -3,6 +3,9 @@
 #include "drogon/HttpResponse.h"
 #include "drogon/utils/Utilities.h"
 
+// Include WebSocket controller to trigger auto-registration
+#include "LogWebSocket.h"
+
 #include <string>
 #include <thread>
 #include <mutex>

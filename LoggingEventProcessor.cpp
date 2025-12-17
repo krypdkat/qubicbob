@@ -19,6 +19,7 @@
 #include "Profiler.h"
 #include "shim.h"
 #include <future>
+#include "RESTAPI/LogSubscriptionManager.h"
 
 using namespace std::chrono_literals;
 extern "C" {
@@ -769,6 +770,26 @@ verifyNodeStateDigest:
             {
                 saveState(lastVerifiedTick, processToTick);
             }
+
+            // Push verified logs to WebSocket subscribers
+            if (LogSubscriptionManager::instance().getClientCount() > 0 && !vle.empty()) {
+                // Group logs by tick for proper ordering
+                uint32_t currentTick = 0;
+                std::vector<LogEvent> tickLogs;
+                for (const auto& log : vle) {
+                    uint32_t logTick = log.getTick();
+                    if (logTick != currentTick && !tickLogs.empty()) {
+                        LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                        tickLogs.clear();
+                    }
+                    currentTick = logTick;
+                    tickLogs.push_back(log);
+                }
+                if (!tickLogs.empty()) {
+                    LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                }
+            }
+
             gCurrentVerifyLoggingTick = processToTick + 1;
         }
     }
