@@ -475,6 +475,22 @@ return 0
     return true;
 }
 
+long long db_get_latest_log_id(uint16_t epoch) {
+    if (!g_redis) return -1;
+    try {
+        const std::string key = "db_status:epoch:" + std::to_string(epoch);
+        auto result = g_redis->hget(key, "latest_log_id");
+        if (result) {
+            return std::stoll(*result);
+        }
+    } catch (const sw::redis::Error &e) {
+        Logger::get()->error("Redis error in db_get_latest_log_id: {}\n", e.what());
+    } catch (const std::exception &e) {
+        Logger::get()->error("Exception in db_get_latest_log_id: {}\n", e.what());
+    }
+    return -1;
+}
+
 bool db_update_latest_verified_tick(uint32_t tick) {
     if (!g_redis) return false;
     try {

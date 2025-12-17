@@ -2,6 +2,7 @@
 #include "LogSubscriptionManager.h"
 #include "Logger.h"
 #include "shim.h"
+#include "database/db.h"
 
 #include <json/json.h>
 
@@ -79,9 +80,17 @@ void LogWebSocket::handleNewMessage(const drogon::WebSocketConnectionPtr& wsConn
 void LogWebSocket::handleSubscribe(const drogon::WebSocketConnectionPtr& conn, const Json::Value& msg) {
     auto& manager = LogSubscriptionManager::instance();
 
-    // Check for optional lastTick parameter
-    // If not provided or null, default to current verified tick (no catch-up)
-    if (msg.isMember("lastTick") && !msg["lastTick"].isNull()) {
+    // Determine catch-up mode: lastLogId takes priority over lastTick
+    bool useLogIdCatchUp = false;
+    int64_t lastLogId = -1;
+
+    if (msg.isMember("lastLogId") && !msg["lastLogId"].isNull()) {
+        if (msg["lastLogId"].isInt64() || msg["lastLogId"].isUInt64() || msg["lastLogId"].isInt() || msg["lastLogId"].isUInt()) {
+            lastLogId = msg["lastLogId"].asInt64();
+            manager.setClientLastLogId(conn, lastLogId);
+            useLogIdCatchUp = true;
+        }
+    } else if (msg.isMember("lastTick") && !msg["lastTick"].isNull()) {
         if (msg["lastTick"].isUInt() || msg["lastTick"].isUInt64()) {
             manager.setClientLastTick(conn, msg["lastTick"].asUInt());
         }
@@ -119,9 +128,16 @@ void LogWebSocket::handleSubscribe(const drogon::WebSocketConnectionPtr& conn, c
         conn->send(writer.write(ack));
 
         // Trigger catch-up after batch subscription
-        uint32_t currentTick = gCurrentVerifyLoggingTick.load();
-        if (currentTick > 0) {
-            manager.performCatchUp(conn, currentTick - 1);
+        if (useLogIdCatchUp) {
+            int64_t currentLogId = db_get_latest_log_id(gCurrentProcessingEpoch.load());
+            if (currentLogId > 0) {
+                manager.performCatchUpByLogId(conn, currentLogId);
+            }
+        } else {
+            uint32_t currentTick = gCurrentVerifyLoggingTick.load();
+            if (currentTick > 0) {
+                manager.performCatchUp(conn, currentTick - 1);
+            }
         }
 
         return;
@@ -147,9 +163,16 @@ void LogWebSocket::handleSubscribe(const drogon::WebSocketConnectionPtr& conn, c
 
     // Trigger catch-up after subscription
     if (success) {
-        uint32_t currentTick = gCurrentVerifyLoggingTick.load();
-        if (currentTick > 0) {
-            manager.performCatchUp(conn, currentTick - 1);
+        if (useLogIdCatchUp) {
+            int64_t currentLogId = db_get_latest_log_id(gCurrentProcessingEpoch.load());
+            if (currentLogId > 0) {
+                manager.performCatchUpByLogId(conn, currentLogId);
+            }
+        } else {
+            uint32_t currentTick = gCurrentVerifyLoggingTick.load();
+            if (currentTick > 0) {
+                manager.performCatchUp(conn, currentTick - 1);
+            }
         }
     }
 }

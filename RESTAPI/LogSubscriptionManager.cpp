@@ -55,6 +55,16 @@ void LogSubscriptionManager::setClientLastTick(const drogon::WebSocketConnection
     auto it = clients_.find(conn);
     if (it != clients_.end()) {
         it->second.lastTick = lastTick;
+        it->second.lastLogId = -1;  // Clear log ID when tick is set
+    }
+}
+
+void LogSubscriptionManager::setClientLastLogId(const drogon::WebSocketConnectionPtr& conn, int64_t lastLogId) {
+    std::unique_lock lock(mutex_);
+
+    auto it = clients_.find(conn);
+    if (it != clients_.end()) {
+        it->second.lastLogId = lastLogId;
     }
 }
 
@@ -371,6 +381,128 @@ void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr
     sendJson(conn, writer.write(msg));
 
     Logger::get()->info("Catch-up complete: {} logs delivered (ticks {}-{})", logsDelivered, fromTick, toTick);
+}
+
+void LogSubscriptionManager::performCatchUpByLogId(const drogon::WebSocketConnectionPtr& conn, int64_t toLogId) {
+    int64_t fromLogId;
+    std::unordered_set<SubscriptionKey, SubscriptionKeyHash> subscriptions;
+
+    {
+        std::unique_lock lock(mutex_);
+        auto it = clients_.find(conn);
+        if (it == clients_.end()) return;
+
+        if (it->second.subscriptions.empty()) {
+            // No subscriptions, nothing to catch up
+            Json::Value msg;
+            msg["type"] = "catchUpComplete";
+            msg["fromLogId"] = Json::Int64(0);
+            msg["toLogId"] = Json::Int64(toLogId);
+            msg["logsDelivered"] = 0;
+            Json::FastWriter writer;
+            sendJson(conn, writer.write(msg));
+            return;
+        }
+
+        fromLogId = it->second.lastLogId + 1;
+        subscriptions = it->second.subscriptions;
+        it->second.catchUpInProgress = true;
+    }
+
+    if (fromLogId < 0) fromLogId = 0;
+
+    if (fromLogId > toLogId) {
+        // Already up to date
+        std::unique_lock lock(mutex_);
+        auto it = clients_.find(conn);
+        if (it != clients_.end()) {
+            it->second.catchUpInProgress = false;
+            it->second.lastLogId = toLogId;
+        }
+
+        Json::Value msg;
+        msg["type"] = "catchUpComplete";
+        msg["fromLogId"] = Json::Int64(fromLogId);
+        msg["toLogId"] = Json::Int64(toLogId);
+        msg["logsDelivered"] = 0;
+        Json::FastWriter writer;
+        sendJson(conn, writer.write(msg));
+        return;
+    }
+
+    uint16_t epoch = gCurrentProcessingEpoch.load();
+    int logsDelivered = 0;
+
+    // Process in batches to avoid blocking too long
+    const int64_t BATCH_SIZE = 1000;
+
+    for (int64_t id = fromLogId; id <= toLogId; id += BATCH_SIZE) {
+        int64_t batchEnd = std::min(id + BATCH_SIZE - 1, toLogId);
+
+        auto logs = db_try_get_logs(epoch, id, batchEnd);
+
+        for (auto& log : logs) {
+            SubscriptionKey key;
+            if (!extractSubscriptionKey(log, key)) continue;
+
+            // Check if client is subscribed to this key
+            if (subscriptions.find(key) == subscriptions.end()) continue;
+
+            // Parse log to JSON using same format as REST API
+            std::string parsedJson = log.parseToJson();
+
+            // Parse the JSON string to embed it in our message
+            Json::Value parsedLog;
+            Json::CharReaderBuilder builder;
+            std::string errors;
+            std::istringstream stream(parsedJson);
+            Json::parseFromStream(builder, stream, &parsedLog, &errors);
+
+            // Build WebSocket message with parsed log as "message" field
+            Json::Value msg;
+            msg["type"] = "log";
+            msg["scIndex"] = key.scIndex;
+            msg["logType"] = key.logType;
+            msg["isCatchUp"] = true;
+            msg["message"] = parsedLog;
+
+            Json::FastWriter writer;
+            try {
+                conn->send(writer.write(msg));
+                logsDelivered++;
+            } catch (const std::exception& e) {
+                Logger::get()->warn("Catch-up send failed: {}", e.what());
+                break;
+            }
+        }
+
+        // Check if connection is still valid
+        if (!conn->connected()) {
+            Logger::get()->info("Catch-up aborted: connection closed");
+            return;
+        }
+    }
+
+    // Mark catch-up complete
+    {
+        std::unique_lock lock(mutex_);
+        auto it = clients_.find(conn);
+        if (it != clients_.end()) {
+            it->second.catchUpInProgress = false;
+            it->second.lastLogId = toLogId;
+        }
+    }
+
+    // Send completion message
+    Json::Value msg;
+    msg["type"] = "catchUpComplete";
+    msg["fromLogId"] = Json::Int64(fromLogId);
+    msg["toLogId"] = Json::Int64(toLogId);
+    msg["logsDelivered"] = logsDelivered;
+    Json::FastWriter writer;
+    sendJson(conn, writer.write(msg));
+
+    Logger::get()->info("Catch-up by logId complete: {} logs delivered (logIds {}-{})", logsDelivered, fromLogId, toLogId);
 }
 
 size_t LogSubscriptionManager::getClientCount() const {

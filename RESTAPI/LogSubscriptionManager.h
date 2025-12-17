@@ -33,7 +33,8 @@ struct SubscriptionKeyHash {
 struct ClientState {
     drogon::WebSocketConnectionPtr conn;
     std::unordered_set<SubscriptionKey, SubscriptionKeyHash> subscriptions;
-    uint32_t lastTick{0};           // For catch-up tracking
+    uint32_t lastTick{0};           // For catch-up tracking by tick
+    int64_t lastLogId{-1};          // For catch-up tracking by log ID (-1 = not set)
     bool catchUpInProgress{false};  // True while catch-up is running
     std::chrono::steady_clock::time_point connectedAt;
 };
@@ -50,6 +51,9 @@ public:
     // Set lastTick for catch-up (called during init message)
     void setClientLastTick(const drogon::WebSocketConnectionPtr& conn, uint32_t lastTick);
 
+    // Set lastLogId for catch-up by log ID
+    void setClientLastLogId(const drogon::WebSocketConnectionPtr& conn, int64_t lastLogId);
+
     // Subscription management
     bool subscribe(const drogon::WebSocketConnectionPtr& conn, uint32_t scIndex, uint32_t logType);
     bool unsubscribe(const drogon::WebSocketConnectionPtr& conn, uint32_t scIndex, uint32_t logType);
@@ -61,6 +65,9 @@ public:
     // Perform catch-up: send historical logs from lastTick+1 to currentTick
     // This is async and should be called after subscriptions are set
     void performCatchUp(const drogon::WebSocketConnectionPtr& conn, uint32_t toTick);
+
+    // Perform catch-up by log ID: send historical logs from lastLogId+1 to toLogId
+    void performCatchUpByLogId(const drogon::WebSocketConnectionPtr& conn, int64_t toLogId);
 
     // Stats
     size_t getClientCount() const;
