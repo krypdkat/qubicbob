@@ -32,6 +32,13 @@ void LogWebSocket::handleConnectionClosed(const drogon::WebSocketConnectionPtr& 
 void LogWebSocket::handleNewMessage(const drogon::WebSocketConnectionPtr& wsConnPtr,
                                     std::string&& message,
                                     const drogon::WebSocketMessageType& type) {
+    // Silently ignore ping/pong and other control frames
+    if (type == drogon::WebSocketMessageType::Ping ||
+        type == drogon::WebSocketMessageType::Pong ||
+        type == drogon::WebSocketMessageType::Close) {
+        return;
+    }
+
     if (type != drogon::WebSocketMessageType::Text) {
         sendError(wsConnPtr, "Only text messages are supported", "INVALID_TYPE");
         return;
