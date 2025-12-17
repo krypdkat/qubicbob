@@ -183,3 +183,11 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/default_config_bob.json
 		${CMAKE_BINARY_DIR}/bob.json
 )
+
+# Copy OpenAPI spec to build directory
+add_custom_command(
+		TARGET bob POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		${CMAKE_SOURCE_DIR}/RESTAPI/openapi.json
+		${CMAKE_BINARY_DIR}/openapi.json
+)
