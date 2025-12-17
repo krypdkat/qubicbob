@@ -678,7 +678,7 @@ namespace {
                 .setLogLevel(trantor::Logger::kInfo)
                 .addListener("0.0.0.0", 40420)  // listen at port 40420
                 .setThreadNum(std::max(2, gMaxThreads))
-                .setIdleConnectionTimeout(10)
+                .setIdleConnectionTimeout(120)      // Increased for WebSocket connections
                 .setKeepaliveRequestsNumber(200)
                 .setMaxConnectionNum(1000)          // Limit max concurrent connections
                 .setMaxConnectionNumPerIP(100)      // Limit per-IP connections (prevents single client abuse)

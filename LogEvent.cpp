@@ -148,6 +148,23 @@ std::string LogEvent::parseToJson()
             break;
         }
 
+        case 13: { // CONTRACT_RESERVE_DEDUCTION
+            const auto needed = static_cast<uint32_t>(sizeof(ContractReserveDeduction));
+            if (bodySize < needed) {
+                body["error"] = "body_too_small_for_ContractReserveDeduction";
+                body["needed"] = needed;
+                body["got"] = bodySize;
+            } else {
+                const ContractReserveDeduction *c = getStruct<ContractReserveDeduction>();
+                root["logTypename"] = "CONTRACT_RESERVE_DEDUCTION";
+                body["deductedAmount"] = Json::UInt64(c->deductedAmount);
+                body["remainingAmount"] = Json::Int64(c->remainingAmount);
+                body["contractIndex"] = c->contractIndex;
+                filled = true;
+            }
+            break;
+        }
+
         case 255: { // CUSTOM_MESSAGE: 8-byte payload
             if (bodySize == 8) {
                 uint64_t v;

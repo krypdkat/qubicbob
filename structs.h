@@ -422,6 +422,12 @@ struct Burning
     unsigned int contractIndexBurnedFor;
 };
 
+struct ContractReserveDeduction
+{
+    unsigned long long deductedAmount;
+    long long remainingAmount;
+    unsigned int contractIndex;
+};
 
 struct Computors
 {
