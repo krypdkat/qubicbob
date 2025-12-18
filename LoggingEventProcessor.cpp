@@ -884,7 +884,11 @@ void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd,
                 }
                 SLEEP(1000);
             }
-            while (gCurrentFetchingLogTick >= (gCurrentFetchingTick+1) && !stopFlag.load(std::memory_order_relaxed)) SLEEP(100);
+            if (gCurrentFetchingLogTick >= (gCurrentFetchingTick+1))
+            {
+                SLEEP(100);
+                continue;
+            }
             if (stopFlag.load(std::memory_order_relaxed)) break;
             if (!db_check_log_range(gCurrentFetchingLogTick))
             {

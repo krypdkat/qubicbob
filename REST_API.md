@@ -187,6 +187,83 @@ POST /broadcastTransaction
   - 400: error JSON for invalid hex payload
   - 500: error JSON on internal error
 
+
+## POST /getQuTransfersForIdentity
+
+- Description: Returns QU (native token) transfer events involving a specific identity, within a tick range.
+- Request body (JSON):
+  - fromTick: uint32 (inclusive)
+  - toTick: uint32 (inclusive)
+  - identity: string
+- Validation:
+  - Request body must be valid JSON.
+  - Required fields: fromTick, toTick, identity.
+- Responses:
+  - 200: JSON result (format depends on backend)
+  - 400: error JSON for invalid JSON or missing required fields
+  - 500: error JSON on internal error
+
+### Example
+
+```bash
+curl -sS http://HOST:40420/getQuTransfersForIdentity \
+-H "Content-Type: application/json" \
+-d '{"fromTick":1000000,"toTick":1000100,"identity":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB"}'
+```
+
+---
+
+## POST /getAssetTransfersForIdentity
+
+- Description: Returns asset transfer events involving a specific identity (filtered by asset issuer + asset name), within a tick range.
+- Request body (JSON):
+  - fromTick: uint32 (inclusive)
+  - toTick: uint32 (inclusive)
+  - identity: string
+  - assetIssuer: string
+  - assetName: string
+- Validation:
+  - Request body must be valid JSON.
+  - Required fields: fromTick, toTick, identity, assetIssuer, assetName.
+- Responses:
+  - 200: JSON result (format depends on backend)
+  - 400: error JSON for invalid JSON or missing required fields
+  - 500: error JSON on internal error
+
+### Example
+
+```bash
+curl -sS http://HOST:40420/getAssetTransfersForIdentity \
+-H "Content-Type: application/json" \
+-d '{"fromTick":1000000,"toTick":1000100,"identity":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB","assetIssuer":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBFXIB","assetName":"MYASSET"}'
+```
+
+---
+
+## POST /getAllAssetTransfers
+
+- Description: Returns all transfer events for a specific asset (filtered by asset issuer + asset name), within a tick range (not restricted to a single identity).
+- Request body (JSON):
+  - fromTick: uint32 (inclusive)
+  - toTick: uint32 (inclusive)
+  - assetIssuer: string
+  - assetName: string
+- Validation:
+  - Request body must be valid JSON.
+  - Required fields: fromTick, toTick, assetIssuer, assetName.
+- Responses:
+  - 200: JSON result (format depends on backend)
+  - 400: error JSON for invalid JSON or missing required fields
+  - 500: error JSON on internal error
+
+### Example
+
+```bash
+curl -sS http://HOST:40420/getAllAssetTransfers \
+-H "Content-Type: application/json" \
+-d '{"fromTick":1000000,"toTick":1000100,"assetIssuer":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBFXIB","assetName":"MYASSET"}'
+```
+
 ----------------------------------------------------------------
 
 HTTP Status Codes

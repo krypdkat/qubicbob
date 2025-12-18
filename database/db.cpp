@@ -212,7 +212,7 @@ bool db_log_exists(uint16_t epoch, uint64_t logId) {
     return false;
 }
 
-bool db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
+bool _db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange) {
     if (!g_redis) return false;
     try {
         // Default to -1s
@@ -256,7 +256,7 @@ bool db_delete_log_ranges(uint32_t tick) {
 
 bool db_try_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange)
 {
-    if (db_get_log_ranges(tick, logRange))
+    if (_db_get_log_ranges(tick, logRange))
     {
         return true;
     }
@@ -1106,7 +1106,23 @@ std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32
 {
     std::vector<uint32_t> result;
     if (!g_redis) return result;
-
+    if (topic1.size() != 60) {
+        Logger::get()->error("db_search_log: Error topic1 size, expect 60 but get {}", topic1.size());
+        return result;
+    }
+    if (topic2.size() != 60) {
+        Logger::get()->error("db_search_log: Error topic2 size, expect 60 but get {}", topic2.size());
+        return result;
+    }
+    if (topic3.size() != 60) {
+        Logger::get()->error("db_search_log: Error topic3 size, expect 60 but get {}", topic3.size());
+        return result;
+    }
+    if (std::any_of(topic1.begin(), topic1.end(), ::isupper) ||
+        std::any_of(topic2.begin(), topic2.end(), ::isupper) ||
+        std::any_of(topic3.begin(), topic3.end(), ::isupper)) {
+        Logger::get()->warn("db_search_log: Topics cannot contain uppercase characters");
+    }
     try {
         auto toPart = [](const std::string& t) -> std::string {
             return (t == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib") ? std::string("ANY") : t;

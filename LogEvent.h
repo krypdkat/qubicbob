@@ -97,24 +97,22 @@ public:
     }
 
     // Validates basic invariants against expected epoch/tick and size consistency.
-    bool selfCheck(uint16_t epoch_) const
+    bool selfCheck(uint16_t epoch_, bool showErrorLog=true) const
     {
         if (content.size() < 8 + PackedHeaderSize)
         {
-            Logger::get()->critical("One Logging Event record is broken, expect >{} get {}", 8+PackedHeaderSize, content.size());
+            if (showErrorLog) Logger::get()->critical("One Logging Event record is broken, expect >{} get {}", 8+PackedHeaderSize, content.size());
             return false;
         }
         // Basic invariants:
         if (getEpoch() != epoch_) {
-            Logger::get()->critical
-                    ("One Logging Event record is broken: expect epoch {} get {}", epoch_, getEpoch());
+            if (showErrorLog) Logger::get()->critical ("One Logging Event record is broken: expect epoch {} get {}", epoch_, getEpoch());
             return false;
         }
         const auto sz = getLogSize();
         if (content.size() != PackedHeaderSize + static_cast<size_t>(sz)) {
             // Allow zero-size content only if header says so.
-            Logger::get()->critical
-                    ("One Logging Event record is broken: expect size {} get {}",
+            if (showErrorLog) Logger::get()->critical("One Logging Event record is broken: expect size {} get {}",
                      PackedHeaderSize + static_cast<size_t>(sz), content.size());
             return sz == 0 && content.size() == PackedHeaderSize;
         }
@@ -122,7 +120,7 @@ public:
         // Returns 0 for unknown types (no extra constraint).
         auto min_needed = expectedMinBodySizeForType(getType());
         if (min_needed > 0 && sz < min_needed) {
-            Logger::get()->critical("LogEvent body too small for type {}: need >= {}, got {} (epoch {}, tick {}, logId {})",
+            if (showErrorLog) Logger::get()->critical("LogEvent body too small for type {}: need >= {}, got {} (epoch {}, tick {}, logId {})",
                                     getType(), min_needed, sz, getEpoch(), getTick(), getLogId());
             return false;
         }

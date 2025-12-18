@@ -52,6 +52,7 @@ namespace sw { namespace redis { class Redis; }}
 #define SIGNATURE_SIZE 64
 #define NUMBER_OF_TRANSACTIONS_PER_TICK 1024
 #define MAX_NUMBER_OF_CONTRACTS 1024
+#define WILDCARD "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
 
 // ---- Database Interface ----
 
@@ -462,8 +463,6 @@ std::vector<TickVote> db_try_to_get_votes(uint32_t tick);
 
 std::vector<uint32_t> db_search_log(uint32_t scIndex, uint32_t scLogType, uint32_t fromTick, uint32_t toTick,
                                     std::string topic1, std::string topic2, std::string topic3);
-
-bool db_get_log_ranges(uint32_t tick, LogRangesPerTxInTick &logRange);
 
 bool db_insert_u32(const std::string key, uint32_t value);
 bool db_get_u32(const std::string key, uint32_t &value);

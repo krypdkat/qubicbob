@@ -78,4 +78,5 @@ This response indicates that only ticks `35917462` and `35917541` (within the sp
 #### Use Cases
 This method is ideal for backend services that need to build user-specific data logs on the fly. For example, QX or QSWAP can use this endpoint to find all relevant trading events for a specific user and then cache that data, rather than scanning the entire chain history.
 
-- [Finding asset transfer](FIND_LOG_ASSET.MD)
+- [Finding asset transfer (EASY)](FIND_LOG_ASSET_ADVANCED.MD)
+- [Finding asset transfer (ADVANCED)](FIND_LOG_ASSET_ADVANCED.MD)

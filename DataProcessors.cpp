@@ -142,7 +142,7 @@ void processLogEvent(const uint8_t* _ptr, uint32_t chunkSize)
         uint32_t messageSize = tmp & 0x00FFFFFF;
         LogEvent le;
         le.updateContent(ptr, messageSize + LogEvent::PackedHeaderSize);
-        if (le.selfCheck(gCurrentProcessingEpoch))
+        if (le.selfCheck(gCurrentProcessingEpoch, false /*don't need to show log*/))
         {
             if (!db_insert_log(epoch, tick, logId, messageSize + LogEvent::PackedHeaderSize, ptr))
             {
