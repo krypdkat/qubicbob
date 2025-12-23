@@ -3,8 +3,10 @@
 #include "drogon/HttpResponse.h"
 #include "drogon/utils/Utilities.h"
 
-// Include WebSocket controller to trigger auto-registration
+// Include WebSocket controllers to trigger auto-registration
 #include "LogWebSocket.h"
+#include "QubicRpcWebSocket.h"
+#include "QubicRpcHandler.h"
 
 #include <string>
 #include <thread>
@@ -669,6 +671,115 @@ namespace {
                     }
                 },
                 {Post}
+        );
+
+        // POST /qubic - Qubic JSON-RPC endpoint (HTTP)
+        app().registerHandler(
+                "/qubic",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+                    // Set CORS headers for browser compatibility
+                    auto setCorsHeaders = [](const HttpResponsePtr& resp) {
+                        resp->addHeader("Access-Control-Allow-Origin", "*");
+                        resp->addHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+                        resp->addHeader("Access-Control-Allow-Headers", "Content-Type");
+                    };
+
+                    try {
+                        auto jsonPtr = req->getJsonObject();
+                        if (!jsonPtr) {
+                            // Try parsing raw body
+                            std::string body(req->getBody());
+                            if (body.empty()) {
+                                auto resp = makeError("Invalid or missing JSON body");
+                                setCorsHeaders(resp);
+                                callback(resp);
+                                return;
+                            }
+
+                            Json::Value root;
+                            Json::CharReaderBuilder builder;
+                            std::string errors;
+                            std::istringstream stream(body);
+                            if (!Json::parseFromStream(builder, stream, &root, &errors)) {
+                                Json::Value errResp = QubicRpcHandler::makeError(
+                                    Json::Value::null, QubicRpcError::PARSE_ERROR, "Parse error: " + errors);
+                                auto resp = HttpResponse::newHttpJsonResponse(errResp);
+                                resp->setStatusCode(k200OK);
+                                setCorsHeaders(resp);
+                                callback(resp);
+                                return;
+                            }
+
+                            // Process the request
+                            Json::Value response;
+                            if (root.isArray()) {
+                                response = QubicRpcHandler::processBatch(root);
+                            } else {
+                                response = QubicRpcHandler::processRequest(root);
+                            }
+
+                            if (response.isNull()) {
+                                // Notification - no response
+                                auto resp = HttpResponse::newHttpResponse();
+                                resp->setStatusCode(k204NoContent);
+                                setCorsHeaders(resp);
+                                callback(resp);
+                            } else {
+                                auto resp = HttpResponse::newHttpJsonResponse(response);
+                                resp->setStatusCode(k200OK);
+                                setCorsHeaders(resp);
+                                callback(resp);
+                            }
+                            return;
+                        }
+
+                        const auto& json = *jsonPtr;
+
+                        // Process the request
+                        Json::Value response;
+                        if (json.isArray()) {
+                            response = QubicRpcHandler::processBatch(json);
+                        } else {
+                            response = QubicRpcHandler::processRequest(json);
+                        }
+
+                        if (response.isNull()) {
+                            // Notification - no response
+                            auto resp = HttpResponse::newHttpResponse();
+                            resp->setStatusCode(k204NoContent);
+                            setCorsHeaders(resp);
+                            callback(resp);
+                        } else {
+                            auto resp = HttpResponse::newHttpJsonResponse(response);
+                            resp->setStatusCode(k200OK);
+                            setCorsHeaders(resp);
+                            callback(resp);
+                        }
+                    } catch (const std::exception &ex) {
+                        Json::Value errResp = QubicRpcHandler::makeError(
+                            Json::Value::null, QubicRpcError::INTERNAL_ERROR, ex.what());
+                        auto resp = HttpResponse::newHttpJsonResponse(errResp);
+                        resp->setStatusCode(k200OK);
+                        setCorsHeaders(resp);
+                        callback(resp);
+                    }
+                },
+                {Post, Options}
+        );
+
+        // OPTIONS /qubic - CORS preflight
+        app().registerHandler(
+                "/qubic",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+                    auto resp = HttpResponse::newHttpResponse();
+                    resp->setStatusCode(k204NoContent);
+                    resp->addHeader("Access-Control-Allow-Origin", "*");
+                    resp->addHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+                    resp->addHeader("Access-Control-Allow-Headers", "Content-Type");
+                    resp->addHeader("Access-Control-Max-Age", "86400");
+                    callback(resp);
+                },
+                {Options}
         );
 
     }

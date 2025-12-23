@@ -15,6 +15,7 @@
 #define gCurrentFetchingLogTick   (GS().gCurrentLoggingEventTick)
 #define gCurrentVerifyLoggingTick  (GS().gCurrentVerifyLoggingTick)
 #define gCurrentIndexingTick       (GS().gCurrentIndexingTick)
+#define gCurrentNetworkTick        (GS().gCurrentNetworkTick)
 #define computorsList              (GS().computorsList)
 
 #define spectrum                   ((EntityRecord*)GS().spectrum)

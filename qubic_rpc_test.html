@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qubic JSON-RPC API Tester</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0d1117;
+            color: #c9d1d9;
+        }
+        h1 {
+            color: #58a6ff;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #8b949e;
+            font-size: 14px;
+            text-transform: uppercase;
+            margin-top: 30px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        .sidebar {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #30363d;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        .main {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .config-section {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #30363d;
+        }
+        .config-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        label {
+            color: #8b949e;
+            font-size: 12px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        input, textarea, select {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #c9d1d9;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .endpoint-input {
+            flex: 1;
+            min-width: 200px;
+        }
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #2ea043;
+        }
+        button:disabled {
+            background: #30363d;
+            cursor: not-allowed;
+        }
+        button.secondary {
+            background: #21262d;
+            border: 1px solid #30363d;
+        }
+        button.secondary:hover {
+            background: #30363d;
+        }
+        .method-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            background: #21262d;
+            border: 1px solid transparent;
+            font-size: 13px;
+        }
+        .method-btn:hover {
+            border-color: #30363d;
+            background: #30363d;
+        }
+        .method-btn.active {
+            background: #388bfd26;
+            border-color: #58a6ff;
+            color: #58a6ff;
+        }
+        .method-category {
+            color: #8b949e;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin: 15px 0 8px 0;
+            padding-left: 12px;
+        }
+        .method-category:first-child {
+            margin-top: 0;
+        }
+        .editor-section {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #30363d;
+        }
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .editor-title {
+            color: #8b949e;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        textarea.code {
+            width: 100%;
+            min-height: 200px;
+            resize: vertical;
+        }
+        .response-section {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #30363d;
+            flex: 1;
+        }
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .response-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+        }
+        .response-meta span {
+            color: #8b949e;
+        }
+        .response-meta .value {
+            color: #c9d1d9;
+        }
+        .response-meta .success {
+            color: #3fb950;
+        }
+        .response-meta .error {
+            color: #f85149;
+        }
+        pre {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 15px;
+            overflow: auto;
+            max-height: 400px;
+            font-size: 13px;
+            margin: 0;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.connected {
+            background: #3fb950;
+        }
+        .status-dot.disconnected {
+            background: #f85149;
+        }
+        .ws-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #30363d;
+        }
+        .ws-messages {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .ws-message {
+            padding: 4px 0;
+            border-bottom: 1px solid #21262d;
+        }
+        .ws-message:last-child {
+            border-bottom: none;
+        }
+        .ws-message.incoming {
+            color: #3fb950;
+        }
+        .ws-message.outgoing {
+            color: #58a6ff;
+        }
+        .ws-message.error {
+            color: #f85149;
+        }
+        .help-text {
+            color: #8b949e;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 8px 16px;
+            background: #21262d;
+            border: none;
+            color: #8b949e;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab.active {
+            background: #161b22;
+            color: #c9d1d9;
+        }
+        .filter-input {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Qubic JSON-RPC API Tester</h1>
+
+    <div class="container">
+        <div class="sidebar">
+            <input type="text" class="filter-input" id="methodFilter" placeholder="Filter methods..." oninput="filterMethods()">
+
+            <div class="method-category">Chain Info</div>
+            <button class="method-btn" onclick="selectMethod('qubic_chainId')">qubic_chainId</button>
+            <button class="method-btn" onclick="selectMethod('qubic_clientVersion')">qubic_clientVersion</button>
+            <button class="method-btn" onclick="selectMethod('qubic_syncing')">qubic_syncing</button>
+            <button class="method-btn" onclick="selectMethod('qubic_getCurrentEpoch')">qubic_getCurrentEpoch</button>
+
+            <div class="method-category">Tick Methods</div>
+            <button class="method-btn" onclick="selectMethod('qubic_getTickNumber')">qubic_getTickNumber</button>
+            <button class="method-btn" onclick="selectMethod('qubic_getTickByNumber')">qubic_getTickByNumber</button>
+
+            <div class="method-category">Transaction Methods</div>
+            <button class="method-btn" onclick="selectMethod('qubic_getTransactionByHash')">qubic_getTransactionByHash</button>
+            <button class="method-btn" onclick="selectMethod('qubic_getTransactionReceipt')">qubic_getTransactionReceipt</button>
+            <button class="method-btn" onclick="selectMethod('qubic_broadcastTransaction')">qubic_broadcastTransaction</button>
+
+            <div class="method-category">Balance & Transfers</div>
+            <button class="method-btn" onclick="selectMethod('qubic_getBalance')">qubic_getBalance</button>
+            <button class="method-btn" onclick="selectMethod('qubic_getTransfers')">qubic_getTransfers</button>
+
+            <div class="method-category">Asset Methods</div>
+            <button class="method-btn" onclick="selectMethod('qubic_getAssetBalance')">qubic_getAssetBalance</button>
+            <button class="method-btn" onclick="selectMethod('qubic_getAssets')">qubic_getAssets</button>
+
+            <div class="method-category">Log Methods</div>
+            <button class="method-btn" onclick="selectMethod('qubic_getLogs')">qubic_getLogs</button>
+
+            <div class="method-category">WebSocket Subscriptions</div>
+            <button class="method-btn" onclick="selectMethod('qubic_subscribe_newTicks')">qubic_subscribe (newTicks)</button>
+            <button class="method-btn" onclick="selectMethod('qubic_subscribe_logs')">qubic_subscribe (logs)</button>
+            <button class="method-btn" onclick="selectMethod('qubic_subscribe_transfers')">qubic_subscribe (transfers)</button>
+            <button class="method-btn" onclick="selectMethod('qubic_unsubscribe')">qubic_unsubscribe</button>
+        </div>
+
+        <div class="main">
+            <div class="config-section">
+                <div class="config-row">
+                    <div style="flex: 1;">
+                        <label>HTTP Endpoint</label>
+                        <input type="text" id="httpEndpoint" class="endpoint-input" value="http://localhost:40420/qubic" style="width: 100%;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>WebSocket Endpoint</label>
+                        <input type="text" id="wsEndpoint" class="endpoint-input" value="ws://localhost:40420/ws/qubic" style="width: 100%;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('http')">HTTP</button>
+                <button class="tab" onclick="switchTab('websocket')">WebSocket</button>
+            </div>
+
+            <div id="httpTab">
+                <div class="editor-section">
+                    <div class="editor-header">
+                        <span class="editor-title">Request</span>
+                        <div>
+                            <button class="secondary" onclick="formatJson()">Format</button>
+                            <button onclick="sendRequest()">Send Request</button>
+                        </div>
+                    </div>
+                    <textarea id="requestBody" class="code">{
+  "jsonrpc": "2.0",
+  "method": "qubic_getTickNumber",
+  "params": [],
+  "id": 1
+}</textarea>
+                </div>
+
+                <div class="response-section">
+                    <div class="response-header">
+                        <span class="editor-title">Response</span>
+                        <div class="response-meta">
+                            <span>Status: <span id="responseStatus" class="value">-</span></span>
+                            <span>Time: <span id="responseTime" class="value">-</span></span>
+                        </div>
+                    </div>
+                    <pre id="responseBody">// Response will appear here</pre>
+                </div>
+            </div>
+
+            <div id="websocketTab" style="display: none;">
+                <div class="editor-section">
+                    <div class="editor-header">
+                        <span class="editor-title">
+                            <span class="status-dot disconnected" id="wsStatus"></span>
+                            WebSocket Connection
+                        </span>
+                        <div>
+                            <button id="wsConnectBtn" onclick="toggleWebSocket()">Connect</button>
+                        </div>
+                    </div>
+                    <textarea id="wsRequestBody" class="code">{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscribe",
+  "params": ["newTicks"],
+  "id": 1
+}</textarea>
+                    <div style="margin-top: 10px;">
+                        <button onclick="sendWsMessage()">Send Message</button>
+                        <button class="secondary" onclick="clearWsMessages()">Clear Messages</button>
+                    </div>
+                </div>
+
+                <div class="response-section">
+                    <div class="response-header">
+                        <span class="editor-title">Messages</span>
+                    </div>
+                    <div class="ws-messages" id="wsMessages">
+                        <div class="ws-message" style="color: #8b949e;">// WebSocket messages will appear here</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let requestId = 1;
+
+        const methodTemplates = {
+            'qubic_chainId': {
+                method: 'qubic_chainId',
+                params: []
+            },
+            'qubic_clientVersion': {
+                method: 'qubic_clientVersion',
+                params: []
+            },
+            'qubic_syncing': {
+                method: 'qubic_syncing',
+                params: []
+            },
+            'qubic_getCurrentEpoch': {
+                method: 'qubic_getCurrentEpoch',
+                params: []
+            },
+            'qubic_getTickNumber': {
+                method: 'qubic_getTickNumber',
+                params: []
+            },
+            'qubic_getTickByNumber': {
+                method: 'qubic_getTickByNumber',
+                params: ['latest', false],
+                help: 'Params: [tickNumber or "latest"/"earliest"/"pending", includeTransactions]'
+            },
+            'qubic_getTransactionByHash': {
+                method: 'qubic_getTransactionByHash',
+                params: ['TXHASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'],
+                help: 'Params: [transactionHash (60-char Qubic hash)]'
+            },
+            'qubic_getTransactionReceipt': {
+                method: 'qubic_getTransactionReceipt',
+                params: ['TXHASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'],
+                help: 'Params: [transactionHash (60-char Qubic hash)]'
+            },
+            'qubic_broadcastTransaction': {
+                method: 'qubic_broadcastTransaction',
+                params: ['0x...signedTransactionHex...'],
+                help: 'Params: [signedTransactionHex]'
+            },
+            'qubic_getBalance': {
+                method: 'qubic_getBalance',
+                params: ['BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID'],
+                help: 'Params: [identity (60-char Qubic identity)]'
+            },
+            'qubic_getTransfers': {
+                method: 'qubic_getTransfers',
+                params: [{
+                    identity: 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID',
+                    fromTick: 12490000,
+                    toTick: 12500000
+                }],
+                help: 'Filter: identity, fromTick, toTick, scIndex, logType, topic1/2/3'
+            },
+            'qubic_getAssetBalance': {
+                method: 'qubic_getAssetBalance',
+                params: [
+                    'OWNERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                    'ISSUERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                    'CFB'
+                ],
+                help: 'Params: [ownerIdentity, issuerIdentity, assetName]'
+            },
+            'qubic_getAssets': {
+                method: 'qubic_getAssets',
+                params: ['BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID'],
+                help: 'Params: [identity]'
+            },
+            'qubic_getLogs': {
+                method: 'qubic_getLogs',
+                params: [{
+                    fromTick: 12490000,
+                    toTick: 12490100,
+                    logType: [0, 1, 2]
+                }],
+                help: 'Filter: fromTick, toTick, identity[], logType[]'
+            },
+            'qubic_subscribe_newTicks': {
+                method: 'qubic_subscribe',
+                params: ['newTicks'],
+                ws: true
+            },
+            'qubic_subscribe_logs': {
+                method: 'qubic_subscribe',
+                params: ['logs', {
+                    logType: [0]
+                }],
+                ws: true
+            },
+            'qubic_subscribe_transfers': {
+                method: 'qubic_subscribe',
+                params: ['transfers', {
+                    identity: 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID'
+                }],
+                ws: true
+            },
+            'qubic_unsubscribe': {
+                method: 'qubic_unsubscribe',
+                params: ['subscription_id_here'],
+                ws: true
+            }
+        };
+
+        function selectMethod(methodName) {
+            const template = methodTemplates[methodName];
+            if (!template) return;
+
+            // Update active button
+            document.querySelectorAll('.method-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const request = {
+                jsonrpc: '2.0',
+                method: template.method,
+                params: template.params,
+                id: requestId++
+            };
+
+            const json = JSON.stringify(request, null, 2);
+
+            if (template.ws) {
+                switchTab('websocket');
+                document.getElementById('wsRequestBody').value = json;
+            } else {
+                switchTab('http');
+                document.getElementById('requestBody').value = json;
+            }
+        }
+
+        function filterMethods() {
+            const filter = document.getElementById('methodFilter').value.toLowerCase();
+            document.querySelectorAll('.method-btn').forEach(btn => {
+                const text = btn.textContent.toLowerCase();
+                btn.style.display = text.includes(filter) ? 'block' : 'none';
+            });
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+
+            document.getElementById('httpTab').style.display = tab === 'http' ? 'block' : 'none';
+            document.getElementById('websocketTab').style.display = tab === 'websocket' ? 'block' : 'none';
+        }
+
+        function formatJson() {
+            const textarea = document.getElementById('requestBody');
+            try {
+                const parsed = JSON.parse(textarea.value);
+                textarea.value = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+            }
+        }
+
+        async function sendRequest() {
+            const endpoint = document.getElementById('httpEndpoint').value;
+            const body = document.getElementById('requestBody').value;
+            const statusEl = document.getElementById('responseStatus');
+            const timeEl = document.getElementById('responseTime');
+            const responseEl = document.getElementById('responseBody');
+
+            statusEl.textContent = 'Loading...';
+            statusEl.className = 'value';
+            timeEl.textContent = '-';
+
+            const startTime = performance.now();
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: body
+                });
+
+                const endTime = performance.now();
+                const data = await response.json();
+
+                statusEl.textContent = response.status + ' ' + response.statusText;
+                statusEl.className = response.ok ? 'value success' : 'value error';
+                timeEl.textContent = Math.round(endTime - startTime) + 'ms';
+                responseEl.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                const endTime = performance.now();
+                statusEl.textContent = 'Error';
+                statusEl.className = 'value error';
+                timeEl.textContent = Math.round(endTime - startTime) + 'ms';
+                responseEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        function toggleWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connectWebSocket();
+            }
+        }
+
+        function connectWebSocket() {
+            const endpoint = document.getElementById('wsEndpoint').value;
+            const statusEl = document.getElementById('wsStatus');
+            const connectBtn = document.getElementById('wsConnectBtn');
+
+            try {
+                ws = new WebSocket(endpoint);
+
+                ws.onopen = () => {
+                    statusEl.className = 'status-dot connected';
+                    connectBtn.textContent = 'Disconnect';
+                    addWsMessage('Connected to ' + endpoint, 'incoming');
+                };
+
+                ws.onclose = () => {
+                    statusEl.className = 'status-dot disconnected';
+                    connectBtn.textContent = 'Connect';
+                    addWsMessage('Disconnected', 'error');
+                };
+
+                ws.onerror = (e) => {
+                    addWsMessage('WebSocket error', 'error');
+                };
+
+                ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        addWsMessage(JSON.stringify(data, null, 2), 'incoming');
+                    } catch {
+                        addWsMessage(e.data, 'incoming');
+                    }
+                };
+            } catch (e) {
+                addWsMessage('Connection error: ' + e.message, 'error');
+            }
+        }
+
+        function sendWsMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('WebSocket not connected');
+                return;
+            }
+
+            const body = document.getElementById('wsRequestBody').value;
+            try {
+                JSON.parse(body); // Validate JSON
+                ws.send(body);
+                addWsMessage(body, 'outgoing');
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+            }
+        }
+
+        function addWsMessage(message, type) {
+            const container = document.getElementById('wsMessages');
+            const div = document.createElement('div');
+            div.className = 'ws-message ' + type;
+
+            const prefix = type === 'outgoing' ? '>>> ' : type === 'incoming' ? '<<< ' : '!!! ';
+            const timestamp = new Date().toLocaleTimeString();
+
+            div.textContent = `[${timestamp}] ${prefix}${message}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearWsMessages() {
+            document.getElementById('wsMessages').innerHTML = '';
+        }
+
+        // Select first method on load
+        document.querySelector('.method-btn').click();
+    </script>
+</body>
+</html>

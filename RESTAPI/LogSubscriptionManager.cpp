@@ -1,4 +1,5 @@
 #include "LogSubscriptionManager.h"
+#include "QubicSubscriptionManager.h"
 #include "database/db.h"
 #include "Logger.h"
 #include "shim.h"
@@ -189,6 +190,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         Logger::get()->warn("LogSubscriptionManager: Trying to get deleted tick data");
     }
+    else
+    {
+        // Notify Qubic subscription manager of new tick (for newTicks subscriptions)
+        QubicSubscriptionManager::instance().onNewTick(tick, td);
+    }
 
     if (!db_try_get_log_ranges(tick, lr))
     {
@@ -304,6 +310,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
                 }
             });
         }
+    }
+
+    // Notify Qubic subscription manager of new logs (for logs subscriptions)
+    if (!logs.empty() && td.tick != 0) {
+        QubicSubscriptionManager::instance().onNewLogs(tick, logs, td);
     }
 }
 
