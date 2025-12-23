@@ -2,6 +2,10 @@
 
 This guide is for exchange developers and integrators who want to connect to Qubic. If you're familiar with Ethereum's JSON-RPC API, this guide will help you understand the differences and map concepts between the two.
 
+
+> [!WARNING]
+> This documentation is still work in  progress. please don't use it atm.
+
 ## Table of Contents
 
 1. [Introduction](#introduction)
@@ -68,7 +72,7 @@ curl -X POST http://localhost:40420/qubic \
 | Block | **Tick** | Atomic consensus unit, ~1 second interval |
 | Block number | **Tick number** | Sequential 32-bit integer |
 | Block hash | **Tick signature** | 64-byte Schnorr signature |
-| Address (20 bytes, 0x...) | **Identity** (60 chars) | Base26 encoded public key |
+| Address (20 bytes, 0x...) | **Identity** (60 chars) | Encoded public key (A-Z) |
 | Private key | **Seed** (55 lowercase letters) | Used to derive identity |
 | wei/gwei/ether | **QU** | No decimals, raw integer units |
 | Gas limit/price | N/A | Qubic has no gas fees |
