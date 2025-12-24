@@ -16,6 +16,9 @@
 #include "shim.h"
 #include "bob.h"
 #include "Version.h"
+#ifdef KAFKA_ENABLED
+#include "KafkaProducer.h"
+#endif
 void IOVerifyThread(std::atomic_bool& stopFlag);
 void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
 void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, std::atomic_bool& stopFlag, std::chrono::milliseconds request_logging_cycle_ms);
@@ -131,6 +134,16 @@ int runBob(int argc, char *argv[])
     }
 
     startRESTServer();
+
+#ifdef KAFKA_ENABLED
+    // Initialize Kafka producer if enabled
+    if (cfg.kafka.enabled) {
+        if (!KafkaProducer::instance().init(cfg.kafka)) {
+            Logger::get()->error("Failed to initialize Kafka producer");
+            // Non-fatal - continue without Kafka
+        }
+    }
+#endif
 
     if (gTickStorageMode == TickStorageMode::Kvrocks)
     {
@@ -363,6 +376,14 @@ int runBob(int argc, char *argv[])
 
     stopRESTServer();
     Logger::get()->info("Closed REST server at port 40420");
+
+#ifdef KAFKA_ENABLED
+    // Shutdown Kafka producer
+    if (KafkaProducer::instance().isEnabled()) {
+        KafkaProducer::instance().shutdown();
+        Logger::get()->info("Closed Kafka producer");
+    }
+#endif
 
     db_close();
     Logger::get()->info("Closed KEYDB connection");

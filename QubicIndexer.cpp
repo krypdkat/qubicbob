@@ -8,6 +8,10 @@
 #include "K12AndKeyUtil.h"
 #include "GlobalVar.h"
 #include "shim.h"
+#ifdef KAFKA_ENABLED
+#include "KafkaProducer.h"
+#include <json/json.h>
+#endif
 static bool matchesTransaction(const QuTransfer &transfer, const Transaction &tx) {
     return transfer.sourcePublicKey == tx.sourcePublicKey &&
             transfer.destinationPublicKey == tx.destinationPublicKey &&
@@ -45,6 +49,61 @@ static uint64_t calculateUnixTimestamp(const TickData &td) {
     return millis;
 }
 
+#ifdef KAFKA_ENABLED
+// Helper to convert bytes to hex string
+static std::string bytesToHex(const uint8_t* data, size_t len) {
+    static const char hexChars[] = "0123456789abcdef";
+    std::string result;
+    result.reserve(len * 2);
+    for (size_t i = 0; i < len; ++i) {
+        result.push_back(hexChars[(data[i] >> 4) & 0xF]);
+        result.push_back(hexChars[data[i] & 0xF]);
+    }
+    return result;
+}
+
+// Send transaction to Kafka
+static void sendTxToKafka(uint32_t tick, const std::string& txHash, int txIndex,
+                          bool isExecuted, uint64_t timestamp,
+                          const std::vector<uint8_t>& tx_data) {
+    if (!KafkaProducer::instance().isEnabled()) return;
+
+    Json::Value txJson;
+    txJson["tick"] = tick;
+    txJson["txHash"] = txHash;
+    txJson["txIndex"] = txIndex;
+    txJson["isExecuted"] = isExecuted;
+    txJson["timestamp"] = Json::UInt64(timestamp);
+
+    if (!tx_data.empty() && tx_data.size() >= sizeof(Transaction)) {
+        const Transaction* tx = reinterpret_cast<const Transaction*>(tx_data.data());
+
+        char fromId[65] = {0};
+        char toId[65] = {0};
+        getIdentityFromPublicKey(tx->sourcePublicKey, fromId, false);
+        getIdentityFromPublicKey(tx->destinationPublicKey, toId, false);
+
+        txJson["from"] = std::string(fromId);
+        txJson["to"] = std::string(toId);
+        txJson["amount"] = Json::Int64(tx->amount);
+        txJson["inputType"] = tx->inputType;
+        txJson["inputSize"] = tx->inputSize;
+
+        // Include input data if present (as hex)
+        if (tx->inputSize > 0 && tx_data.size() >= sizeof(Transaction) + tx->inputSize) {
+            const uint8_t* inputData = tx_data.data() + sizeof(Transaction);
+            txJson["inputData"] = bytesToHex(inputData, tx->inputSize);
+        } else {
+            txJson["inputData"] = "";
+        }
+    }
+
+    Json::FastWriter writer;
+    std::string jsonStr = writer.write(txJson);
+    KafkaProducer::instance().sendTransaction(jsonStr);
+}
+#endif
+
 static void indexTick(uint32_t tick, const TickData &td) {
     LogRangesPerTxInTick logrange{};
     uint64_t timestamp = td.epoch == gCurrentProcessingEpoch ? calculateUnixTimestamp(td) : 0;
@@ -58,12 +117,12 @@ static void indexTick(uint32_t tick, const TickData &td) {
 
             LogEvent firstEvent;
             bool isExecuted = false;
+            std::vector<uint8_t> tx_data;
             if (logrange.length[i] > 0) {
                 db_try_get_log(td.epoch, logrange.fromLogId[i], firstEvent);
                 if (firstEvent.getType() == QU_TRANSFER) { // QuTransfer type
                     QuTransfer transfer{};
                     memcpy((void*)&transfer, firstEvent.getLogBodyPtr(), sizeof(QuTransfer));
-                    std::vector<uint8_t> tx_data;
                     if (db_try_get_transaction(txHash, tx_data)) {
                         auto tx = (Transaction*)tx_data.data();
                         if (tx->amount < gSpamThreshold && tx->inputSize == 0 && tx->inputType == 0) // spam tx => not index
@@ -78,6 +137,14 @@ static void indexTick(uint32_t tick, const TickData &td) {
             db_set_indexed_tx(key.c_str(), i, logrange.fromLogId[i],
                               logrange.fromLogId[i] + logrange.length[i] - 1, timestamp,
                               isExecuted);
+
+#ifdef KAFKA_ENABLED
+            // Send transaction to Kafka
+            if (tx_data.empty()) {
+                db_try_get_transaction(txHash, tx_data);
+            }
+            sendTxToKafka(tick, txHash, i, isExecuted, timestamp, tx_data);
+#endif
         }
     }
 
@@ -272,6 +339,13 @@ static void indexTick(uint32_t tick, const TickData &td) {
             }
         }
     }
+
+#ifdef KAFKA_ENABLED
+    // Poll Kafka producer to handle delivery reports
+    if (KafkaProducer::instance().isEnabled()) {
+        KafkaProducer::instance().poll(0);
+    }
+#endif
 
     Logger::get()->trace("Indexed verified tick {}", tick);
 }

@@ -3,6 +3,10 @@
 #include "Logger.h"
 #include "shim.h"
 #include "structs.h"
+#include "K12AndKeyUtil.h"
+#ifdef KAFKA_ENABLED
+#include "KafkaProducer.h"
+#endif
 
 #include <json/json.h>
 #include <sstream>
@@ -204,6 +208,55 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
         // scan to find the first cursor
         logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log0Id);
     }
+
+    // Calculate timestamp from tick data
+    uint64_t timestamp = 0;
+    if (td.tick == tick) {
+        std::tm timeinfo = {};
+        timeinfo.tm_year = int(td.year) + 2000 - 1900;
+        timeinfo.tm_mon = td.month - 1;
+        timeinfo.tm_mday = td.day;
+        timeinfo.tm_hour = td.hour;
+        timeinfo.tm_min = td.minute;
+        timeinfo.tm_sec = td.second;
+        timeinfo.tm_isdst = -1;
+        time_t t = timegm(&timeinfo);
+        timestamp = static_cast<uint64_t>(t) * 1000u + static_cast<uint64_t>(td.millisecond);
+    }
+
+#ifdef KAFKA_ENABLED
+    // Send all verified logs to Kafka (independent of WebSocket subscribers)
+    if (KafkaProducer::instance().isEnabled() && !logs.empty()) {
+        int kafkaTxOrderIndex = lr.scanTxId(logTxOrder, 0, logs[0].getLogId());
+        for (const auto& log : logs) {
+            auto logId = log.getLogId();
+            int txIdx = logTxOrder[kafkaTxOrderIndex];
+            auto s = lr.fromLogId[txIdx];
+            auto e = s + lr.length[txIdx] - 1;
+            if (logId > e) {
+                kafkaTxOrderIndex = lr.scanTxId(logTxOrder, kafkaTxOrderIndex + 1, logId);
+                txIdx = logTxOrder[kafkaTxOrderIndex];
+            }
+
+            // Get txHash for this log
+            std::string txHash;
+            if (txIdx >= 0 && txIdx < NUMBER_OF_TRANSACTIONS_PER_TICK) {
+                char hash[65] = {0};
+                getIdentityFromPublicKey(td.transactionDigests[txIdx].m256i_u8, hash, true);
+                txHash = std::string(hash);
+            } else {
+                // Special event (INIT, BEGIN_EPOCH, etc.)
+                txHash = std::to_string(tick) + "_" + std::to_string(txIdx);
+            }
+
+            // Parse log to JSON and send to Kafka
+            std::string parsedJson = const_cast<LogEvent&>(log).parseToJsonWithExtraData(td, txIdx);
+            KafkaProducer::instance().sendLog(parsedJson, txHash, timestamp);
+        }
+        // Poll to handle delivery reports
+        KafkaProducer::instance().poll(0);
+    }
+#endif
 
     {
         std::shared_lock lock(mutex_);

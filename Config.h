@@ -17,6 +17,17 @@ enum class TxStorageMode {
     Free
 };
 
+// Kafka configuration (optional feature)
+struct KafkaConfig {
+    bool enabled = false;
+    std::string brokers = "localhost:9092";
+    std::string logs_topic = "qubic-logs";
+    std::string txs_topic = "qubic-txs";
+    int batch_size = 10000;           // librdkafka batch.num.messages
+    int linger_ms = 5;                // librdkafka linger.ms
+    std::string compression = "snappy"; // none, gzip, snappy, lz4, zstd
+};
+
 struct AppConfig {
     std::vector<std::string> p2p_nodes;
 
@@ -43,6 +54,12 @@ struct AppConfig {
     TxStorageMode tx_storage_mode = TxStorageMode::LastNTick;
     // For "kvrocks" tx-storage-mode: how long transactions stay in RAM (in ticks)
     unsigned tx_tick_to_live = 10000;
+
+    // REST API server port (default 40421)
+    unsigned rest_server_port = 40421;
+
+    // Kafka producer configuration (optional)
+    KafkaConfig kafka;
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

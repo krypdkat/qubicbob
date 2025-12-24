@@ -12,5 +12,14 @@
   "tx-storage-mode" : "kvrocks",
   "tx_tick_to_live" : 3000,
   "max-thread": 8,
-  "spam-qu-threshold": 100
+  "spam-qu-threshold": 100,
+  "kafka": {
+    "enabled": false,
+    "brokers": "localhost:9092",
+    "logs-topic": "qubic-logs",
+    "txs-topic": "qubic-txs",
+    "compression": "snappy",
+    "batch-size": 10000,
+    "linger-ms": 5
+  }
 }

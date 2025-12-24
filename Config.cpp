@@ -300,5 +300,75 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             return false;
         }
     }
+
+    // Parse Kafka configuration (optional)
+    if (root.isMember("kafka")) {
+        const auto& kafka = root["kafka"];
+        if (!kafka.isObject()) {
+            error = "Invalid type: object required for key 'kafka'";
+            return false;
+        }
+
+        if (kafka.isMember("enabled")) {
+            if (!kafka["enabled"].isBool()) {
+                error = "Invalid type: boolean required for key 'kafka.enabled'";
+                return false;
+            }
+            out.kafka.enabled = kafka["enabled"].asBool();
+        }
+
+        if (kafka.isMember("brokers")) {
+            if (!kafka["brokers"].isString()) {
+                error = "Invalid type: string required for key 'kafka.brokers'";
+                return false;
+            }
+            out.kafka.brokers = kafka["brokers"].asString();
+        }
+
+        if (kafka.isMember("logs-topic")) {
+            if (!kafka["logs-topic"].isString()) {
+                error = "Invalid type: string required for key 'kafka.logs-topic'";
+                return false;
+            }
+            out.kafka.logs_topic = kafka["logs-topic"].asString();
+        }
+
+        if (kafka.isMember("txs-topic")) {
+            if (!kafka["txs-topic"].isString()) {
+                error = "Invalid type: string required for key 'kafka.txs-topic'";
+                return false;
+            }
+            out.kafka.txs_topic = kafka["txs-topic"].asString();
+        }
+
+        if (kafka.isMember("compression")) {
+            if (!kafka["compression"].isString()) {
+                error = "Invalid type: string required for key 'kafka.compression'";
+                return false;
+            }
+            out.kafka.compression = kafka["compression"].asString();
+        }
+
+        if (kafka.isMember("batch-size")) {
+            const auto& v = kafka["batch-size"];
+            if (v.isInt()) {
+                out.kafka.batch_size = v.asInt();
+            } else {
+                error = "Invalid type: integer required for key 'kafka.batch-size'";
+                return false;
+            }
+        }
+
+        if (kafka.isMember("linger-ms")) {
+            const auto& v = kafka["linger-ms"];
+            if (v.isInt()) {
+                out.kafka.linger_ms = v.asInt();
+            } else {
+                error = "Invalid type: integer required for key 'kafka.linger-ms'";
+                return false;
+            }
+        }
+    }
+
     return true;
 }

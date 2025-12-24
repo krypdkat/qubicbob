@@ -84,6 +84,19 @@ if(JSONCPP_INCLUDE_DIRS)
 endif()
 set(JSONCPP_TARGET jsoncpp_lib)
 
+# librdkafka (optional - for Kafka producer)
+find_package(PkgConfig)
+if(PkgConfig_FOUND)
+    pkg_check_modules(RDKAFKA rdkafka)
+endif()
+if(RDKAFKA_FOUND)
+    message(STATUS "Found librdkafka: ${RDKAFKA_VERSION}")
+    set(KAFKA_ENABLED ON)
+else()
+    message(STATUS "librdkafka not found - Kafka support disabled")
+    set(KAFKA_ENABLED OFF)
+endif()
+
 # drogon
 FetchContent_Declare(
 		drogon
@@ -148,6 +161,11 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/RESTAPI/LogWebSocket.cpp
 )
 
+# Add Kafka source if librdkafka is available
+if(KAFKA_ENABLED)
+    list(APPEND FILES ${CMAKE_SOURCE_DIR}/KafkaProducer.cpp)
+endif()
+
 add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c
 		XKCP/KeccakP-1600-AVX2.s
 		XKCP/KeccakP-1600-times4-AVX2.c
@@ -158,6 +176,13 @@ add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c
 add_library(bob_lib STATIC ${FILES})
 target_link_libraries(bob_lib PRIVATE redis++_static hiredis spdlog::spdlog cxxopts::cxxopts
 		${ZSTD_TARGET} XKCP_avx2 drogon ${JSONCPP_TARGET})
+
+# Add Kafka support if available
+if(KAFKA_ENABLED)
+    target_compile_definitions(bob_lib PUBLIC KAFKA_ENABLED=1)
+    target_include_directories(bob_lib PRIVATE ${RDKAFKA_INCLUDE_DIRS})
+    target_link_libraries(bob_lib PRIVATE ${RDKAFKA_LIBRARIES})
+endif()
 
 
 # --- Executable and Linking ---
