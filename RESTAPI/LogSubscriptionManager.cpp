@@ -250,8 +250,10 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
             }
 
             // Parse log to JSON and send to Kafka
+            // Use epoch:logId as the unique key for deduplication across multiple bob instances
+            std::string logKey = std::to_string(epoch) + ":" + std::to_string(logId);
             std::string parsedJson = const_cast<LogEvent&>(log).parseToJsonWithExtraData(td, txIdx);
-            KafkaProducer::instance().sendLog(parsedJson, txHash, timestamp);
+            KafkaProducer::instance().sendLog(parsedJson, logKey, timestamp);
         }
         // Poll to handle delivery reports
         KafkaProducer::instance().poll(0);

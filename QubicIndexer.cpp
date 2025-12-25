@@ -100,7 +100,7 @@ static void sendTxToKafka(uint32_t tick, const std::string& txHash, int txIndex,
 
     Json::FastWriter writer;
     std::string jsonStr = writer.write(txJson);
-    KafkaProducer::instance().sendTransaction(jsonStr);
+    KafkaProducer::instance().sendTransaction(jsonStr, txHash);
 }
 #endif
 

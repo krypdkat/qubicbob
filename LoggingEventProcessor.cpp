@@ -772,7 +772,7 @@ verifyNodeStateDigest:
             }
 
             // Push verified logs to WebSocket subscribers
-            if (LogSubscriptionManager::instance().getClientCount() > 0 && !vle.empty()) {
+            if (!vle.empty()) {
                 // Group logs by tick for proper ordering
                 uint32_t currentTick = 0;
                 std::vector<LogEvent> tickLogs;

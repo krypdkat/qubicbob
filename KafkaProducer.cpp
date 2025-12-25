@@ -175,18 +175,19 @@ void KafkaProducer::shutdown() {
                        messagesSent_.load(), messagesDelivered_.load(), messagesFailed_.load());
 }
 
-void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& txHash, uint64_t timestamp) {
+void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& logKey, uint64_t timestamp) {
     if (!enabled_.load() || !producer_ || !logsTopic_) return;
+    (void)timestamp; // Reserved for future use
 
-    // Use txHash as the message key for partitioning
+    // Use logKey (epoch:logId) as the message key for partitioning and deduplication
     int result = rd_kafka_produce(
         logsTopic_,
         RD_KAFKA_PARTITION_UA,  // Let librdkafka choose partition
         RD_KAFKA_MSG_F_COPY,    // Copy the payload
         const_cast<char*>(parsedJson.data()),
         parsedJson.size(),
-        txHash.data(),          // Key
-        txHash.size(),
+        logKey.data(),          // Key
+        logKey.size(),
         nullptr                 // Opaque (per-message)
     );
 
@@ -201,8 +202,8 @@ void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& tx
                 RD_KAFKA_MSG_F_COPY,
                 const_cast<char*>(parsedJson.data()),
                 parsedJson.size(),
-                txHash.data(),
-                txHash.size(),
+                logKey.data(),
+                logKey.size(),
                 nullptr
             );
         }
@@ -218,17 +219,18 @@ void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& tx
     messagesSent_++;
 }
 
-void KafkaProducer::sendTransaction(const std::string& txJson) {
+void KafkaProducer::sendTransaction(const std::string& txJson, const std::string& txHash) {
     if (!enabled_.load() || !producer_ || !txsTopic_) return;
 
+    // Use txHash as the message key for partitioning and deduplication
     int result = rd_kafka_produce(
         txsTopic_,
         RD_KAFKA_PARTITION_UA,
         RD_KAFKA_MSG_F_COPY,
         const_cast<char*>(txJson.data()),
         txJson.size(),
-        nullptr,  // No key - round-robin partitioning
-        0,
+        txHash.data(),
+        txHash.size(),
         nullptr
     );
 
@@ -242,8 +244,8 @@ void KafkaProducer::sendTransaction(const std::string& txJson) {
                 RD_KAFKA_MSG_F_COPY,
                 const_cast<char*>(txJson.data()),
                 txJson.size(),
-                nullptr,
-                0,
+                txHash.data(),
+                txHash.size(),
                 nullptr
             );
         }

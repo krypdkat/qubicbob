@@ -21,13 +21,14 @@ public:
 
     // Send a verified log event to Kafka (async, non-blocking)
     // parsedJson: the full JSON representation of the log event
-    // txHash: transaction hash associated with this log
+    // logKey: unique key for this log (e.g., "epoch:logId") used for deduplication
     // timestamp: unix timestamp in milliseconds
-    void sendLog(const std::string& parsedJson, const std::string& txHash, uint64_t timestamp);
+    void sendLog(const std::string& parsedJson, const std::string& logKey, uint64_t timestamp);
 
     // Send a verified transaction to Kafka (async, non-blocking)
     // txJson: JSON representation of the transaction with all fields
-    void sendTransaction(const std::string& txJson);
+    // txHash: transaction hash used as message key for deduplication
+    void sendTransaction(const std::string& txJson, const std::string& txHash);
 
     // Check if the Kafka producer is enabled and initialized
     bool isEnabled() const { return enabled_.load(); }
