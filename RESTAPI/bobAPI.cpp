@@ -156,10 +156,12 @@ std::string bobGetEndEpochLog(uint16_t epoch)
     result.push_back('[');
     bool first = true;
     LogRangesPerTxInTick lr{-1};
-    int logTxOrderIndex = 0;
     std::vector<int> logTxOrder;
     long long start, length, end;
-    db_get_endepoch_log_range_info(epoch, start, length, lr);
+    if (!db_get_endepoch_log_range_info(epoch, start, length, lr))
+    {
+        return "{\"error\": \"bob doesn't have enough info\"}";
+    }
     end = start + length - 1;
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
