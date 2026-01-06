@@ -128,6 +128,7 @@ endif ()
 # --- Project Sources ---
 SET(FILES
 		${CMAKE_SOURCE_DIR}/connection/connection.cpp
+		${CMAKE_SOURCE_DIR}/connection/connectionPool.cpp
 		${CMAKE_SOURCE_DIR}/connection/NodeIntroducer.cpp
         ${CMAKE_SOURCE_DIR}/database/db.cpp
 		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
