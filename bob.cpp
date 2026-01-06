@@ -135,7 +135,7 @@ int runBob(int argc, char *argv[])
     }
     parseConnection(connPool, cfg.p2p_nodes);
 
-    while (connPool.size() > 4) connPool.randomlyRemove();
+    while (connPool.size() > 6) connPool.randomlyRemove();
 
     if (run_server) {
         if (server_port_u == 0 || server_port_u > 65535) {
