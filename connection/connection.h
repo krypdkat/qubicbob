@@ -80,9 +80,10 @@ public:
     void add(const std::vector<QCPtr>& cs);
 
     std::size_t size() const;
-    QCPtr& get(int i);
+    bool get(int i, QCPtr& qc);
 
     void randomlyRemove();
+    void removeDisconnectedClient();
 
     // Sends to one random valid connection. Returns bytes sent, or -1 if none could be used.
     int sendToRandomBM(uint8_t* buffer, int sz, uint8_t type, bool randomDejavu);

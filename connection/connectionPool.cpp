@@ -21,9 +21,24 @@ std::size_t ConnectionPool::size() const {
     return conns_.size();
 }
 
-QCPtr& ConnectionPool::get(int i) {
+bool ConnectionPool::get(int i, QCPtr& qc) {
     std::lock_guard<std::mutex> lock(mutex_);
-    return conns_[i];
+    if (i < conns_.size())
+    {
+        qc = conns_[i];
+        return true;
+    }
+    return false;
+}
+
+void ConnectionPool::removeDisconnectedClient()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (conns_.empty()) return;
+    conns_.erase(
+            std::remove_if(conns_.begin(), conns_.end(),
+                           [](const QCPtr &conn) { return (!conn) || (!conn->isSocketValid() && !conn->isReconnectable()); }),
+            conns_.end());
 }
 
 void ConnectionPool::randomlyRemove() {
