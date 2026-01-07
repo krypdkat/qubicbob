@@ -92,6 +92,7 @@ int runBob(int argc, char *argv[])
     gSpamThreshold = cfg.spam_qu_threshold;
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
+    gRpcPort = cfg.rpc_port;
 
     // Defaults for new knobs are already in AppConfig
     unsigned int request_cycle_ms = cfg.request_cycle_ms;
@@ -366,7 +367,7 @@ int runBob(int argc, char *argv[])
     }
 
     stopRESTServer();
-    Logger::get()->info("Closed REST server at port 40420");
+    Logger::get()->info("Closed REST server at port {}", gRpcPort);
 
     db_close();
     Logger::get()->info("Closed KEYDB connection");

@@ -46,6 +46,9 @@ struct AppConfig {
 
     // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1814400 seconds) (0 => no expiration)
     long long kvrocks_ttl = 1814400;
+
+    // RPC/REST API port (default 40420)
+    unsigned rpc_port = 40420;
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.
