@@ -91,6 +91,7 @@ int runBob(int argc, char *argv[])
     gTxTickToLive = cfg.tx_tick_to_live;
     gSpamThreshold = cfg.spam_qu_threshold;
     gMaxThreads = cfg.max_thread;
+    gKvrocksTTL = cfg.kvrocks_ttl;
 
     // Defaults for new knobs are already in AppConfig
     unsigned int request_cycle_ms = cfg.request_cycle_ms;
@@ -318,9 +319,16 @@ int runBob(int argc, char *argv[])
     sc_thread.join();
     if (log_event_verifier_thread.joinable())
     {
-        Logger::get()->info("Exiting verifyLoggingEvent thread");
         log_event_verifier_thread.join();
         Logger::get()->info("Exited verifyLoggingEvent thread");
+    }
+
+    if (gIsEndEpoch)
+    {
+        // exit all requesters
+        // serve slower nodes 30 more minutes before officially switching epoch
+        Logger::get()->info("Received END_EPOCH message. Serving 30 minutes and then closing BOB");
+        SLEEP(1000ULL * 60 * 30); // 30 minutes
     }
 
     // Now the receivers can drain and exit.
@@ -349,10 +357,6 @@ int runBob(int argc, char *argv[])
     {
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
-    }
-    if (gIsEndEpoch)
-    {
-        Logger::get()->info("Received END_EPOCH message. Closing BOB");
     }
 
     if (run_server)

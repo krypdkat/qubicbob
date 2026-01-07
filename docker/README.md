@@ -175,13 +175,13 @@ For compose setup, use container hostnames:
 
 ```json
 "p2p-node": [
-  "BM:IP:PORT:EPOCH_START-EPOCH_END-EPOCH_START-EPOCH_END",
+  "BM:IP:PORT:P0-P1-P2-P3",
   "BM:157.180.10.49:21841:0-0-0-0"
 ]
 ```
 
 - `BM:` prefix indicates a trusted node
-- `0-0-0-0` means all epochs
+- `0-0-0-0` Passcode from node (relevant for full node connection)
 
 ---
 

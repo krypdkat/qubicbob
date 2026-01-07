@@ -209,6 +209,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
         auto log0Id = logs[0].getLogId();
         // scan to find the first cursor
         logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log0Id);
+        if (logTxOrderIndex == -1)
+        {
+            Logger::get()->warn("[4] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+            return;
+        }
     }
 
     {
@@ -230,6 +235,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
             if (logId > e)
             {
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, logId);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[5] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
 
@@ -414,6 +424,11 @@ void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr
                 {
                     logTxOrder = lr.sort();
                     logTxOrderIndex = lr.scanTxId(logTxOrder, 0, id);// scan to find the first cursor
+                    if (logTxOrderIndex == -1)
+                    {
+                        Logger::get()->warn("[0] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                        return;
+                    }
                 }
             }
 
@@ -424,6 +439,11 @@ void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr
             {
                 // rescan to find next cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[1] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
 
@@ -572,6 +592,11 @@ void LogSubscriptionManager::performCatchUpByLogId(const drogon::WebSocketConnec
                 logTxOrder = lr.sort();
                 // scan to find the first cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, 0, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[2] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
             }
             int txIndex = logTxOrder[logTxOrderIndex];
             auto s = lr.fromLogId[txIndex];
@@ -580,6 +605,11 @@ void LogSubscriptionManager::performCatchUpByLogId(const drogon::WebSocketConnec
             {
                 // rescan to find the next cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[3] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
             // Parse log to JSON using same format as REST API

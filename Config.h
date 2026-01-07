@@ -43,6 +43,9 @@ struct AppConfig {
     TxStorageMode tx_storage_mode = TxStorageMode::LastNTick;
     // For "kvrocks" tx-storage-mode: how long transactions stay in RAM (in ticks)
     unsigned tx_tick_to_live = 10000;
+
+    // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1814400 seconds) (0 => no expiration)
+    long long kvrocks_ttl = 1814400;
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

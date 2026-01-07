@@ -182,6 +182,16 @@ static void indexTick(uint32_t tick, const TickData &td) {
                 break;
             }
 
+            case CONTRACT_RESERVE_DEDUCTION:
+            {
+                SC_index = 0; logType = type;
+                auto e = le.getStruct<ContractReserveDeduction>();
+                topic1 = m256i(0,0,0,e->contractIndex);
+                topic2 = m256i::zero();
+                topic3 = m256i::zero();
+                break;
+            }
+
             case CONTRACT_ERROR_MESSAGE:
             case CONTRACT_WARNING_MESSAGE:
             case CONTRACT_INFORMATION_MESSAGE:

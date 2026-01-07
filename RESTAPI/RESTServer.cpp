@@ -225,6 +225,28 @@ namespace {
                 {Get}
         );
 
+        // GET /getEndEpochLog/{epoch}
+        app().registerHandler(
+                "/getEndEpochLog/{1}",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback,
+                   const std::string &epochStr) {
+                    try {
+                        uint16_t epoch = std::stoi(epochStr);
+                        std::string result = bobGetEndEpochLog(epoch);
+                        callback(makeJsonResponse(result));
+                    } catch (const std::invalid_argument &) {
+                        callback(makeError("epoch must be an integer"));
+                    } catch (const std::out_of_range &) {
+                        callback(makeError("epoch out of range"));
+                    } catch (const std::exception &ex) {
+                        callback(makeError(std::string("getEndEpochLog error: ") + ex.what(), k500InternalServerError));
+                    }
+                },
+                {Get}
+        );
+
+
+
         // GET /tick/{tick_number}
         app().registerHandler(
             "/tick/{1}",

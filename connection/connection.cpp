@@ -465,6 +465,7 @@ void parseConnection(ConnectionPool& connPoolAll,
 
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch)
 {
+    const auto errorBackoff = 1000;
     for (int i = 0; i < cp.size(); i++)
     {
         auto& conn = cp.get(i);
@@ -480,11 +481,13 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
             }
             else
             {
+                SLEEP(errorBackoff);
                 conn->reconnect();
             }
         }
         catch (...)
         {
+            SLEEP(errorBackoff);
             conn->reconnect();
         }
     }
@@ -492,6 +495,7 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
 
 void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
 {
+    const auto errorBackoff = 1000;
     for (int i = 0; i < cp.size(); i++) {
         auto &conn = cp.get(i);
         try {
@@ -520,6 +524,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
         }
         catch (...)
         {
+            SLEEP(errorBackoff);
             conn->reconnect();
         }
     }

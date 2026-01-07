@@ -46,3 +46,5 @@
 #define gSpamThreshold (GS().gSpamThreshold)
 
 #define gNumBMConnection (GS().gNumBMConnection)
+
+#define gKvrocksTTL (GS().gKvrocksTTL)

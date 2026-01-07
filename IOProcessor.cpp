@@ -295,7 +295,7 @@ void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopF
 {
     using namespace std::chrono_literals;
 
-    const auto errorBackoff = 500ms;
+    const auto errorBackoff = 1000ms;
 
     std::vector<uint8_t> packet;
     packet.reserve(64 * 1024); // Optional: initial capacity to minimize reallocations
@@ -309,6 +309,7 @@ void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopF
                 if (!conn->isReconnectable()) return;
                 Logger::get()->trace("connReceiver error on : {}. Disconnecting", conn->getNodeIp());
                 conn->disconnect();
+                SLEEP(errorBackoff);
                 conn->reconnect();
                 continue;
             }

@@ -282,6 +282,18 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("kvrocks_ttl")) {
+        const auto& v = root["kvrocks_ttl"];
+        if (v.isNumeric())
+        {
+            out.kvrocks_ttl = v.asInt64();
+        }
+        else
+        {
+            error = "Invalid type: unsigned integer required for key 'kvrocks_ttl'";
+            return false;
+        }
+    }
 
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {

@@ -16,6 +16,7 @@ std::string bobGetBalance(const char* identity);
 std::string bobGetAsset(const std::string identity, const std::string assetName, const std::string issuer, uint32_t manageSCIndex);
 std::string bobGetTransaction(const char* txHash);
 std::string bobGetLog(uint16_t epoch, int64_t start, int64_t end); // inclusive
+std::string bobGetEndEpochLog(uint16_t epoch);
 std::string bobGetTick(const uint32_t tick); // return Data And Votes and LogRanges
 std::string bobFindLog(uint32_t scIndex, uint32_t logType,
                        const std::string& st1, const std::string& st2, const std::string& st3,

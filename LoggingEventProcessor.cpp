@@ -827,19 +827,6 @@ verifyNodeStateDigest:
 
         // the endTick tick is a virtual tick, we need to migrate its data to new keys:
         uint32_t endTick = lastQuorumTick + 1; // the system just "borrow" this tick index
-        db_rename("log_range_sig:" + std::to_string(endTick),
-                      "end_epoch:" + std::to_string(gCurrentProcessingEpoch) + ":log_range_sig");
-
-        // For log signatures we need to iterate through all chunks
-        int chunkId = 0;
-        std::string oldKey = "log_sig:" + std::to_string(endTick) + ":" + std::to_string(chunkId);
-        while (db_key_exists(oldKey)) {
-            db_rename(oldKey,
-                          "end_epoch:" + std::to_string(gCurrentProcessingEpoch) + ":log_sig:" +
-                          std::to_string(chunkId));
-            chunkId++;
-            oldKey = "log_sig:" + std::to_string(endTick) + ":" + std::to_string(chunkId);
-        }
 
         db_rename("tick_log_range:" + std::to_string(endTick),
                       "end_epoch:tick_log_range:"+std::to_string(gCurrentProcessingEpoch));

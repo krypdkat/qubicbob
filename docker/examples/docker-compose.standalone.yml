@@ -11,6 +11,7 @@ services:
       - "40420:40420"
     volumes:
       # - ./bob.json:/app/bob.json:ro # if needed you can use a custom configuration
+      # - ./redis.conf:/etc/redis/redis.conf:ro # custom Redis config (e.g., to increase maxmemory beyond default 4GB)
       - qubic-bob-redis:/data/redis
       - qubic-bob-kvrocks:/data/kvrocks
       - qubic-bob-data:/data/bob

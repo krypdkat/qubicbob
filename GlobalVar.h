@@ -70,6 +70,8 @@ struct GlobalState {
     uint32_t gTxTickToLive = 10000;
 
     int gNumBMConnection = 0;
+
+    long long gKvrocksTTL = 1814400;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.
