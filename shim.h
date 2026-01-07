@@ -49,3 +49,4 @@
 #define gKvrocksTTL (GS().gKvrocksTTL)
 
 #define gRpcPort (GS().gRpcPort)
+#define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)

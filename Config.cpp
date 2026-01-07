@@ -87,6 +87,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.run_server = root["run-server"].asBool();
     }
 
+    if (root.isMember("allow-receive-log-from-incoming-connections")) {
+        if (!root["allow-receive-log-from-incoming-connections"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-receive-log-from-incoming-connections'";
+            return false;
+        }
+        out.allow_receive_log_from_incoming_connections = root["allow-receive-log-from-incoming-connections"].asBool();
+    }
+
     if (root.isMember("is-testnet")) {
         if (!root["is-testnet"].isBool()) {
             error = "Invalid type: boolean required for key 'is-testnet'";
@@ -313,5 +321,7 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             return false;
         }
     }
+
+
     return true;
 }

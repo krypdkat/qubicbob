@@ -93,6 +93,7 @@ int runBob(int argc, char *argv[])
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
     gRpcPort = cfg.rpc_port;
+    gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
 
     // Defaults for new knobs are already in AppConfig
     unsigned int request_cycle_ms = cfg.request_cycle_ms;
