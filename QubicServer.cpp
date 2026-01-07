@@ -312,7 +312,11 @@ namespace {
                 // Create QubicConnection (this allocates memory and spawns send thread)
                 try {
                     ctx->conn = make_qc_by_socket(cfd);
-                    pConnPool->add(ctx->conn);
+                    if (gAllowReceiveLogFromIncomingConnection)
+                    {
+                        // add to conn pool for data querying
+                        pConnPool->add(ctx->conn);
+                    }
                 } catch (const std::exception& e) {
                     Logger::get()->error("QubicServer: Failed to create connection for {}: {}",
                                          client_ip, e.what());

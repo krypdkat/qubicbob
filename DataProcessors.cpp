@@ -235,6 +235,7 @@ void DataProcessorThread(std::atomic_bool& exitFlag)
                 break;
         }
     }
+    gExitDataThreadCounter++;
 }
 
 void replyTransaction(QCPtr& conn, uint32_t dejavu, uint8_t* ptr)
@@ -510,4 +511,5 @@ void RequestProcessorThread(std::atomic_bool& exitFlag)
                 break;
         }
     }
+    gExitDataThreadCounter++;
 }

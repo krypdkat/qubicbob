@@ -50,3 +50,5 @@
 
 #define gRpcPort (GS().gRpcPort)
 #define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
+#define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
+#define gExitDataThreadCounter (GS().gExitDataThreadCounter)

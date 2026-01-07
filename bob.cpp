@@ -349,6 +349,9 @@ int runBob(int argc, char *argv[])
     Logger::get()->info("Exited recv threads");
 
     // Wake all data threads so none remain blocked on MRB.
+    int N_data_thread = v_data_thread.size();
+    gExitDataThreadCounter = 0;
+    while (N_data_thread > gExitDataThreadCounter.load())
     {
         const size_t wake_count = v_data_thread.size() * 8; // ensure enough tokens
         std::vector<RequestResponseHeader> tokens(wake_count);
@@ -361,10 +364,9 @@ int runBob(int argc, char *argv[])
             MRB_Data.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
             MRB_Request.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
         }
-
-        // Keep tokens alive until all data threads exit
-        for (auto& thr : v_data_thread) thr.join();
     }
+
+    for (auto& thr : v_data_thread) thr.join();
     Logger::get()->info("Exited data threads");
     if (cfg.tick_storage_mode != TickStorageMode::Free)
     {

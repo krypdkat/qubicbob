@@ -73,6 +73,7 @@ struct GlobalState {
     long long gKvrocksTTL = 1814400;
 
     unsigned gRpcPort = 40420;
+    std::atomic_int gExitDataThreadCounter;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.

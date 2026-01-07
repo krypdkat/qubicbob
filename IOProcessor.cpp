@@ -315,9 +315,12 @@ void connReceiver(QCPtr conn, const bool isTrustedNode, std::atomic_bool& stopFl
             }
             if (!isTrustedNode)
             {
-                if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                if (!gAllowReceiveLogFromIncomingConnection) // if operator already allowed to receive, no need to block
                 {
-                    continue; //drop
+                    if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                    {
+                        continue; //drop
+                    }
                 }
             }
             // trusted conn allowed all packets
