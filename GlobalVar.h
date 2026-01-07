@@ -71,6 +71,8 @@ struct GlobalState {
     int gNumBMConnection = 0;
 
     long long gKvrocksTTL = 1814400;
+
+    unsigned gRpcPort = 40420;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.

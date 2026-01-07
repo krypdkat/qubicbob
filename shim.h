@@ -47,3 +47,5 @@
 #define gNumBMConnection (GS().gNumBMConnection)
 
 #define gKvrocksTTL (GS().gKvrocksTTL)
+
+#define gRpcPort (GS().gRpcPort)
