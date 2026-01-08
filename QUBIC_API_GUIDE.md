@@ -998,7 +998,24 @@ Monitor transfers for specific identities:
 
 ### Subscribe to Tick Stream
 
-The `tickStream` subscription provides a comprehensive real-time stream of ticks with full transaction and log data. This is ideal for:
+The `tickStream` subscription provides a comprehensive real-time stream of ticks with full transaction and log data.
+
+**newTicks vs tickStream Comparison:**
+
+| Aspect | `newTicks` | `tickStream` |
+|--------|-----------|--------------|
+| **Purpose** | Lightweight tick notification | Comprehensive tick data stream |
+| **Data included** | Basic tick metadata only | Full transactions + logs |
+| **Filtering** | None | Transaction and log filters |
+| **Catch-up** | No | Yes (via `startTick`) |
+| **Use case** | Know when new tick arrives | Process all chain activity |
+
+**When to use which:**
+
+- **Use `newTicks`** when you just need to know a tick happened and will fetch specific data via HTTP calls afterward, or when you want minimal bandwidth.
+- **Use `tickStream`** when you need all transactions and logs in real-time, are building an explorer or indexer, need transaction execution status immediately, or want historical data via catch-up.
+
+This is ideal for:
 - Building real-time block explorers
 - Monitoring all chain activity
 - Syncing external systems with the chain
