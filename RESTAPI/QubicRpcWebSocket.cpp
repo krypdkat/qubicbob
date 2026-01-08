@@ -243,7 +243,7 @@ Json::Value QubicRpcWebSocket::dispatchMethod(
             if (subId.empty()) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS,
                                "Invalid subscription type: " + subType +
-                               ". Valid types: newTicks, logs, transfers");
+                               ". Valid types: newTicks, logs, transfers, tickStream");
             }
             return makeResult(id, subId);
         }

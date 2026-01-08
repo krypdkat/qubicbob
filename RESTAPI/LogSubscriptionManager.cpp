@@ -219,9 +219,9 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         std::shared_lock lock(mutex_);
 
-        if (clients_.empty() || subscriptionIndex_.empty()) return;
-
-        for (const auto& log : logs) {
+        // Only process for LogSubscriptionManager clients if there are any
+        if (!clients_.empty() && !subscriptionIndex_.empty()) {
+            for (const auto& log : logs) {
             SubscriptionKey key;
             if (!extractSubscriptionKey(log, key)) continue;
             auto logId = log.getLogId();
@@ -301,7 +301,8 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
                 }
                 pendingSends.emplace_back(conn, jsonStr);
             }
-        }
+            }
+        }  // end if (!clients_.empty() && !subscriptionIndex_.empty())
     }
 
     // Dispatch sends asynchronously via Drogon's event loop
@@ -326,6 +327,9 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     if (!logs.empty() && td.tick != 0) {
         QubicSubscriptionManager::instance().onNewLogs(tick, logs, td);
     }
+
+    // Note: tickStream subscriptions are notified from QubicIndexer after indexing
+    // completes, so that transaction execution info (executed, logIdFrom) is available
 }
 
 void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr& conn, uint32_t toTick) {

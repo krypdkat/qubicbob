@@ -688,6 +688,77 @@ std::string QubicRpcMethods::subscribe(
 
         return manager.subscribe(conn, QubicSubscriptionType::Transfers, filter);
     }
+    else if (subscriptionType == "tickStream") {
+        TickStreamFilter filter;
+        uint32_t startTick = 0;
+
+        if (filterParams.isObject()) {
+            // Parse txFilters array
+            if (filterParams.isMember("txFilters") && filterParams["txFilters"].isArray()) {
+                for (const auto& txf : filterParams["txFilters"]) {
+                    TxFilter tf;
+                    if (txf.isMember("from") && txf["from"].isString()) {
+                        tf.from = normalizeIdentity(txf["from"].asString());
+                    }
+                    if (txf.isMember("to") && txf["to"].isString()) {
+                        tf.to = normalizeIdentity(txf["to"].asString());
+                    }
+                    if (txf.isMember("minAmount") && txf["minAmount"].isNumeric()) {
+                        tf.minAmount = txf["minAmount"].asInt64();
+                    }
+                    if (txf.isMember("inputType") && txf["inputType"].isNumeric()) {
+                        tf.inputType = static_cast<int16_t>(txf["inputType"].asInt());
+                    }
+                    filter.txFilters.push_back(tf);
+                }
+            }
+
+            // Parse logFilters array
+            if (filterParams.isMember("logFilters") && filterParams["logFilters"].isArray()) {
+                for (const auto& lf : filterParams["logFilters"]) {
+                    LogStreamFilter sf;
+                    if (lf.isMember("scIndex") && lf["scIndex"].isNumeric()) {
+                        sf.scIndex = lf["scIndex"].asUInt();
+                    }
+                    if (lf.isMember("logType") && lf["logType"].isNumeric()) {
+                        sf.logType = lf["logType"].asUInt();
+                    }
+                    if (lf.isMember("transferMinAmount") && lf["transferMinAmount"].isNumeric()) {
+                        sf.transferMinAmount = lf["transferMinAmount"].asInt64();
+                    }
+                    filter.logFilters.push_back(sf);
+                }
+            }
+
+            // Parse startTick
+            if (filterParams.isMember("startTick") && filterParams["startTick"].isNumeric()) {
+                startTick = filterParams["startTick"].asUInt();
+            }
+
+            // Parse skipEmptyTicks (default: false)
+            if (filterParams.isMember("skipEmptyTicks") && filterParams["skipEmptyTicks"].isBool()) {
+                filter.skipEmptyTicks = filterParams["skipEmptyTicks"].asBool();
+            }
+
+            // Parse includeInputData (default: true)
+            if (filterParams.isMember("includeInputData") && filterParams["includeInputData"].isBool()) {
+                filter.includeInputData = filterParams["includeInputData"].asBool();
+            }
+        }
+
+        // Create the subscription
+        std::string subId = manager.subscribeTickStream(conn, filter, startTick);
+
+        // If startTick specified, trigger catch-up
+        if (!subId.empty() && startTick > 0) {
+            uint32_t currentTick = gCurrentVerifyLoggingTick.load();
+            if (startTick < currentTick) {
+                manager.performCatchUp(conn, subId, startTick, currentTick - 1);
+            }
+        }
+
+        return subId;
+    }
 
     return "";  // Invalid subscription type
 }

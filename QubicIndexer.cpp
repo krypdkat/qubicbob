@@ -8,6 +8,7 @@
 #include "K12AndKeyUtil.h"
 #include "GlobalVar.h"
 #include "shim.h"
+#include "RESTAPI/QubicSubscriptionManager.h"
 static bool matchesTransaction(const QuTransfer &transfer, const Transaction &tx) {
     return transfer.sourcePublicKey == tx.sourcePublicKey &&
             transfer.destinationPublicKey == tx.destinationPublicKey &&
@@ -319,6 +320,22 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
 
         lastIndexed = nextTick;
         gCurrentIndexingTick = lastIndexed;
+
+        // Notify tickStream subscribers after indexing is complete
+        // (all transaction execution info is now available)
+        // This is wrapped in try-catch to ensure indexer continues even if notification fails
+        if (QubicSubscriptionManager::instance().getClientCount() > 0) {
+            try {
+                // Get logs for this tick
+                bool success = false;
+                std::vector<LogEvent> logs = db_get_logs_by_tick_range(td.epoch, nextTick, nextTick, success);
+                QubicSubscriptionManager::instance().onVerifiedTick(nextTick, td.epoch, logs, td);
+            } catch (const std::exception& e) {
+                Logger::get()->warn("QubicIndexer: tickStream notification failed for tick {}: {}", nextTick, e.what());
+            } catch (...) {
+                Logger::get()->warn("QubicIndexer: tickStream notification failed for tick {}: unknown error", nextTick);
+            }
+        }
     }
 
     Logger::get()->info("QubicIndexer: stopping gracefully at last_indexed_tick={}", lastIndexed);

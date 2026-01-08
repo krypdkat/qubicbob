@@ -771,22 +771,30 @@ verifyNodeStateDigest:
                 saveState(lastVerifiedTick, processToTick);
             }
 
-            // Push verified logs to WebSocket subscribers
+            // Push verified logs to WebSocket subscribers (for logs/transfers subscriptions)
+            // Note: tickStream subscriptions are notified from QubicIndexer after indexing
+            // Wrapped in try-catch to ensure log verification continues even if notification fails
             if (LogSubscriptionManager::instance().getClientCount() > 0 && !vle.empty()) {
-                // Group logs by tick for proper ordering
-                uint32_t currentTick = 0;
-                std::vector<LogEvent> tickLogs;
-                for (const auto& log : vle) {
-                    uint32_t logTick = log.getTick();
-                    if (logTick != currentTick && !tickLogs.empty()) {
-                        LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
-                        tickLogs.clear();
+                try {
+                    // Group logs by tick for proper ordering
+                    uint32_t currentTick = 0;
+                    std::vector<LogEvent> tickLogs;
+                    for (const auto& log : vle) {
+                        uint32_t logTick = log.getTick();
+                        if (logTick != currentTick && !tickLogs.empty()) {
+                            LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                            tickLogs.clear();
+                        }
+                        currentTick = logTick;
+                        tickLogs.push_back(log);
                     }
-                    currentTick = logTick;
-                    tickLogs.push_back(log);
-                }
-                if (!tickLogs.empty()) {
-                    LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                    if (!tickLogs.empty()) {
+                        LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                    }
+                } catch (const std::exception& e) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: {}", e.what());
+                } catch (...) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: unknown error");
                 }
             }
 
