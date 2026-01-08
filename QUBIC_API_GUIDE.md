@@ -3,8 +3,8 @@
 This guide is for exchange developers and integrators who want to connect to Qubic. If you're familiar with Ethereum's JSON-RPC API, this guide will help you understand the differences and map concepts between the two.
 
 
-> [!WARNING]
-> This documentation is still work in  progress. please don't use it atm.
+> [!NOTE]
+> This documentation covers the Qubic JSON-RPC 2.0 API including WebSocket subscriptions.
 
 ## Table of Contents
 
@@ -846,11 +846,82 @@ curl -X POST http://localhost:40420/qubic \
   -d '{"jsonrpc":"2.0","method":"qubic_getTransfers","params":[{"scIndex":1,"logType":6,"fromTick":12490000,"toTick":12500000,"topic1":"FILTERIDENTITY..."}],"id":1}'
 ```
 
+### WebSocket (JavaScript - tickStream)
+
+```javascript
+const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:40420/ws/qubic');
+
+ws.on('open', () => {
+  console.log('Connected to Qubic RPC WebSocket');
+
+  // Subscribe to tickStream with filters
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'qubic_subscribe',
+    params: ['tickStream', {
+      txFilters: [],      // Empty = all transactions
+      logFilters: [],     // Empty = all logs
+      skipEmptyTicks: false,
+      includeInputData: true
+    }],
+    id: 1
+  }));
+});
+
+ws.on('message', (data) => {
+  const msg = JSON.parse(data);
+
+  // Handle subscription confirmation
+  if (msg.id === 1 && msg.result) {
+    console.log('Subscribed with ID:', msg.result);
+    return;
+  }
+
+  // Handle tick stream notifications
+  if (msg.method === 'qubic_subscription') {
+    const tick = msg.params.result;
+    console.log(`Tick ${tick.tick}: ${tick.filteredTxs} txs, ${tick.filteredLogs} logs`);
+
+    // Process transactions
+    for (const tx of tick.transactions) {
+      console.log(`  TX: ${tx.hash.slice(0, 20)}... ${tx.from.slice(0, 10)} -> ${tx.to.slice(0, 10)} ${tx.amount} QU`);
+      if (tx.executed) {
+        console.log(`      Executed: logs ${tx.logIdFrom} - ${tx.logIdFrom + tx.logIdLength - 1}`);
+      }
+    }
+
+    // Process logs
+    for (const log of tick.logs) {
+      if (log.logType === 0) {  // QU_TRANSFER
+        console.log(`  LOG: ${log.source.slice(0, 10)} -> ${log.destination.slice(0, 10)} ${log.amount} QU`);
+      }
+    }
+  }
+});
+
+ws.on('close', () => {
+  console.log('Disconnected');
+});
+```
+
 ---
 
 ## WebSocket Subscriptions
 
 Connect to `ws://your-node:40420/ws/qubic` for real-time updates.
+
+### Available Subscription Types
+
+| Type | Description |
+|------|-------------|
+| `newTicks` | New tick notifications |
+| `logs` | Log events matching filter |
+| `transfers` | QU transfer events (specialized log filter) |
+| `tickStream` | Full tick stream with transactions and logs |
+
+---
 
 ### Subscribe to New Ticks
 
@@ -925,6 +996,174 @@ Monitor transfers for specific identities:
 
 ---
 
+### Subscribe to Tick Stream
+
+The `tickStream` subscription provides a comprehensive real-time stream of ticks with full transaction and log data. This is ideal for:
+- Building real-time block explorers
+- Monitoring all chain activity
+- Syncing external systems with the chain
+
+**Request (basic - all ticks with all data):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscribe",
+  "params": ["tickStream", {}],
+  "id": 1
+}
+```
+
+**Request (with filters):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscribe",
+  "params": ["tickStream", {
+    "txFilters": [
+      {
+        "from": "SOURCEIDENTITY...",
+        "to": "DESTIDENTITY...",
+        "minAmount": 1000000,
+        "inputType": 0
+      }
+    ],
+    "logFilters": [
+      {
+        "scIndex": 0,
+        "logType": 0,
+        "transferMinAmount": 1000000
+      }
+    ],
+    "startTick": 12490000,
+    "skipEmptyTicks": false,
+    "includeInputData": true
+  }],
+  "id": 1
+}
+```
+
+**Filter Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `txFilters` | array | `[]` | Transaction filters (empty = all transactions) |
+| `logFilters` | array | `[]` | Log filters (empty = all logs) |
+| `startTick` | number | `0` | Start tick for catch-up (0 = current tick only) |
+| `skipEmptyTicks` | boolean | `false` | Skip ticks with no matching data (heartbeat every 120 ticks) |
+| `includeInputData` | boolean | `true` | Include full inputData hex in transactions |
+
+**Transaction Filter Fields (`txFilters`):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `from` | string | `""` | Source identity filter (empty = any) |
+| `to` | string | `""` | Destination identity filter (empty = any) |
+| `minAmount` | number | `0` | Minimum transfer amount |
+| `inputType` | number | `-1` | Input type filter (-1 = any, 0 = basic transfer, >0 = SC call) |
+
+**Log Filter Fields (`logFilters`):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `scIndex` | number | `0` | Smart contract index (0 = protocol logs) |
+| `logType` | number | `0` | Log type filter |
+| `transferMinAmount` | number | `0` | Minimum amount for QU_TRANSFER events |
+
+**Response:**
+```json
+{"jsonrpc":"2.0","result":"qubic_sub_1","id":1}
+```
+
+**Subscription notifications:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_1",
+    "result": {
+      "epoch": 150,
+      "tick": 12500001,
+      "isCatchUp": false,
+      "timestamp": "2025-01-15T10:30:45Z",
+      "totalLogs": 42,
+      "filteredLogs": 5,
+      "totalTxs": 15,
+      "filteredTxs": 3,
+      "transactions": [
+        {
+          "hash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
+          "from": "SOURCEIDENTITY...",
+          "to": "DESTIDENTITY...",
+          "amount": 1000000,
+          "inputType": 0,
+          "inputSize": 0,
+          "inputData": "",
+          "executed": true,
+          "logIdFrom": 12345678,
+          "logIdLength": 2
+        }
+      ],
+      "logs": [
+        {
+          "tick": 12500001,
+          "epoch": 150,
+          "logId": 12345678,
+          "logType": 0,
+          "logTypeName": "QU_TRANSFER",
+          "source": "SOURCEIDENTITY...",
+          "destination": "DESTIDENTITY...",
+          "amount": "1000000"
+        }
+      ]
+    }
+  }
+}
+```
+
+**Result Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `epoch` | number | Current epoch |
+| `tick` | number | Tick number |
+| `isCatchUp` | boolean | `true` if this is historical data from catch-up |
+| `timestamp` | string | ISO 8601 timestamp of the tick |
+| `totalLogs` | number | Total logs in tick (before filtering) |
+| `filteredLogs` | number | Number of logs matching filter |
+| `totalTxs` | number | Total transactions in tick (before filtering) |
+| `filteredTxs` | number | Number of transactions matching filter |
+| `transactions` | array | Filtered transactions |
+| `logs` | array | Filtered logs |
+
+**Transaction Object Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hash` | string | 60-char transaction hash (lowercase) |
+| `from` | string | Source identity |
+| `to` | string | Destination identity |
+| `amount` | number | Transfer amount in QU |
+| `inputType` | number | Transaction type (0=transfer, >0=SC call) |
+| `inputSize` | number | Size of input data in bytes |
+| `inputData` | string | Hex-encoded input data (if `includeInputData` is true) |
+| `executed` | boolean | Whether the transaction was executed |
+| `logIdFrom` | number | Starting log ID for this transaction (-1 if no logs) |
+| `logIdLength` | number | Number of logs generated by this transaction |
+
+**Catch-Up Behavior:**
+
+When `startTick` is specified and is less than the current tick:
+1. The subscription is created immediately
+2. Historical ticks from `startTick` to current are sent with `isCatchUp: true`
+3. After catch-up completes, real-time ticks continue with `isCatchUp: false`
+
+**Heartbeat Ticks:**
+
+When `skipEmptyTicks` is `true`, ticks with no matching transactions or logs are skipped. However, every 120th tick is always sent as a heartbeat to confirm the connection is alive.
+
+---
+
 ### Unsubscribe
 
 ```json
@@ -934,6 +1173,11 @@ Monitor transfers for specific identities:
   "params": ["qubic_sub_0"],
   "id": 1
 }
+```
+
+**Response:**
+```json
+{"jsonrpc":"2.0","result":true,"id":1}
 ```
 
 ---
@@ -947,16 +1191,21 @@ Monitor transfers for specific identities:
 | `eth_syncing` | `qubic_syncing` |
 | `eth_blockNumber` | `qubic_getTickNumber` |
 | `eth_getBlockByNumber` | `qubic_getTickByNumber` |
-| `eth_getBlockByHash` | `qubic_getTickByHash` |
+| `eth_getBlockByHash` | `qubic_getTickByHash` (disabled) |
 | `eth_getTransactionByHash` | `qubic_getTransactionByHash` |
 | `eth_getTransactionReceipt` | `qubic_getTransactionReceipt` |
 | `eth_getBalance` | `qubic_getBalance` |
 | `eth_getLogs` | `qubic_getLogs` |
-| `eth_subscribe` | `qubic_subscribe` |
+| `eth_subscribe("newHeads")` | `qubic_subscribe("newTicks")` |
+| `eth_subscribe("logs")` | `qubic_subscribe("logs")` |
+| N/A | `qubic_subscribe("transfers")` |
+| N/A | `qubic_subscribe("tickStream")` |
 | `eth_unsubscribe` | `qubic_unsubscribe` |
 | N/A | `qubic_getCurrentEpoch` |
 | N/A | `qubic_getTransfers` |
 | N/A | `qubic_getAssetBalance` |
+| N/A | `qubic_getAssets` (not implemented) |
+| N/A | `qubic_broadcastTransaction` (not implemented) |
 
 ---
 
@@ -981,7 +1230,9 @@ Standard JSON-RPC 2.0 error codes:
 
 1. **Track deposits by identity**: Use `qubic_getTransfers` with your deposit addresses, logType `QU_TRANSFER`
 2. **Poll vs subscribe**: Use WebSocket subscriptions for real-time, HTTP for historical
-3. **No confirmations needed**: Qubic ticks are immediately final
-4. **Epoch awareness**: Balance/state resets at epoch boundaries
-5. **Rate limiting**: Limit log queries to 1000 ticks max per request
-6. **Identity validation**: Verify identities (60 uppercase characters; checksum)
+3. **Real-time streaming**: Use `tickStream` subscription for comprehensive real-time chain monitoring with transaction execution status
+4. **No confirmations needed**: Qubic ticks are immediately final
+5. **Epoch awareness**: Balance/state resets at epoch boundaries
+6. **Rate limiting**: Limit log queries to 1000 ticks max per request
+7. **Identity validation**: Verify identities (60 uppercase characters; checksum)
+8. **Transaction execution**: Check `executed` field in tickStream transactions to verify successful execution
