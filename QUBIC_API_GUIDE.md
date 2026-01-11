@@ -576,12 +576,21 @@ The filter object follows the same format as the `/findLog` endpoint. See [FINDL
     "toTick": 12500000,
     "transfers": [
       {
+        "ok": true,
+        "epoch": 150,
         "tick": 12495000,
+        "type": 0,
         "logId": 12345678,
-        "logType": 0,
-        "source": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "destination": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
-        "amount": "1000000",
+        "logDigest": "a1b2c3d4e5f60718",
+        "bodySize": 72,
+        "logTypename": "QU_TRANSFER",
+        "timestamp": "25-01-11 14:30:45",
+        "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
+        "body": {
+          "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+          "amount": 1000000
+        },
         "direction": "incoming"
       }
     ],
@@ -1123,14 +1132,21 @@ This is ideal for:
       ],
       "logs": [
         {
-          "tick": 12500001,
+          "ok": true,
           "epoch": 150,
+          "tick": 12500001,
+          "type": 0,
           "logId": 12345678,
-          "logType": 0,
-          "logTypeName": "QU_TRANSFER",
-          "source": "SOURCEIDENTITY...",
-          "destination": "DESTIDENTITY...",
-          "amount": "1000000"
+          "logDigest": "a1b2c3d4e5f60718",
+          "bodySize": 72,
+          "logTypename": "QU_TRANSFER",
+          "timestamp": "25-01-11 14:30:45",
+          "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
+          "body": {
+            "from": "SOURCEIDENTITY...",
+            "to": "DESTIDENTITY...",
+            "amount": 1000000
+          }
         }
       ]
     }

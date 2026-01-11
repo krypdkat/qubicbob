@@ -479,10 +479,10 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
         txArray.append(txJson);
     }
 
-    // Build logs array
+    // Build logs array using the same format as qubic_getTransfers
     Json::Value logArray(Json::arrayValue);
     for (const auto& [log, txIndex] : matchedLogs) {
-        Json::Value logJson = QubicRpc::logEventToQubicLog(log, td, txIndex, 0);
+        Json::Value logJson = log.parseToJsonValueWithExtraData(td, txIndex);
         logArray.append(logJson);
     }
 

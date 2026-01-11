@@ -1,6 +1,6 @@
 #include "LogEvent.h"
 
-Json::Value LogEvent::parseToJson()
+Json::Value LogEvent::parseToJson() const
 {
     auto hex_encode = [](const uint8_t* data, size_t len) -> std::string {
         static const char* hexdigits = "0123456789abcdef";
@@ -200,7 +200,7 @@ Json::Value LogEvent::parseToJson()
     root["body"] = body;
     return root;
 }
-std::string LogEvent::parseToJsonStr()
+std::string LogEvent::parseToJsonStr() const
 {
     auto root = parseToJson();
     Json::StreamWriterBuilder wb;
@@ -208,11 +208,9 @@ std::string LogEvent::parseToJsonStr()
     return Json::writeString(wb, root);
 }
 
-std::string LogEvent::parseToJsonWithExtraData(const TickData& td, const int txIndex)
+Json::Value LogEvent::parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const
 {
     auto root = parseToJson();
-    Json::StreamWriterBuilder wb;
-    wb["indentation"] = "";
 
     char timestampBuffer[20];
     snprintf(timestampBuffer, sizeof(timestampBuffer), "%02d-%02d-%02d %02d:%02d:%02d",
@@ -220,7 +218,7 @@ std::string LogEvent::parseToJsonWithExtraData(const TickData& td, const int txI
     std::string timestamp(timestampBuffer);
     root["timestamp"] = timestamp;
 
-    if (txIndex>= 0)
+    if (txIndex >= 0)
     {
         std::string txHash = "";
         if (txIndex < NUMBER_OF_TRANSACTIONS_PER_TICK)
@@ -236,8 +234,16 @@ std::string LogEvent::parseToJsonWithExtraData(const TickData& td, const int txI
             if (txIndex == SC_END_EPOCH_TX) txHash = ("SC_END_EPOCH_TX_" + std::to_string(td.tick));
         }
         root["txHash"] = txHash;
-        return Json::writeString(wb, root);
+        return root;
     }
     root["txHash"] = "null";
+    return root;
+}
+
+std::string LogEvent::parseToJsonWithExtraData(const TickData& td, const int txIndex) const
+{
+    auto root = parseToJsonValueWithExtraData(td, txIndex);
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
     return Json::writeString(wb, root);
 }
