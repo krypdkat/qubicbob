@@ -601,9 +601,15 @@ void QubicSubscriptionManager::onVerifiedTick(
         for (auto& [subId, sub] : subscriptions_) {
             if (sub.type != QubicSubscriptionType::TickStream) continue;
 
-            // Skip if catch-up is in progress (catch-up handles separately)
+            // If catch-up is in progress, queue this tick for later delivery
             if (sub.catchUpInProgress) {
-                Logger::get()->debug("TickStream {} skipped tick {}: catch-up in progress", subId, tick);
+                Logger::get()->debug("TickStream {} queuing tick {} during catch-up", subId, tick);
+                PendingTickData pending;
+                pending.tick = tick;
+                pending.epoch = epoch;
+                pending.td = td;
+                pending.logs = logs;
+                sub.pendingTicks.push_back(std::move(pending));
                 continue;
             }
 
@@ -844,12 +850,183 @@ void QubicSubscriptionManager::performCatchUp(
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
-        // Mark catch-up as complete
+        // Drain pending ticks that arrived during catch-up
+        while (true) {
+            // Check if connection is still valid
+            if (!conn->connected()) {
+                Logger::get()->debug("TickStream {} pending drain aborted: connection closed", subId);
+                break;
+            }
+
+            // Get next pending tick (if any) and filter config
+            std::optional<PendingTickData> pendingTick;
+            TickStreamFilter filter;
+            {
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it == subscriptions_.end() || it->second.conn != conn) {
+                    Logger::get()->debug("TickStream {} pending drain aborted: subscription removed", subId);
+                    return;
+                }
+
+                if (it->second.pendingTicks.empty()) {
+                    // No more pending ticks - mark catch-up as complete
+                    it->second.catchUpInProgress = false;
+                    Logger::get()->info("TickStream catch-up {} complete (drained {} pending ticks)",
+                                       subId, 0);
+                    break;
+                }
+
+                // Take the first pending tick
+                pendingTick = std::move(it->second.pendingTicks.front());
+                it->second.pendingTicks.erase(it->second.pendingTicks.begin());
+                filter = it->second.tickStreamFilter;
+
+                // Skip if we've already sent this tick
+                if (pendingTick->tick <= it->second.lastTick) {
+                    Logger::get()->debug("TickStream {} skipping pending tick {}: already sent",
+                                        subId, pendingTick->tick);
+                    continue;
+                }
+            }
+
+            if (!pendingTick) break;
+
+            // Process the pending tick (similar to real-time processing)
+            uint32_t tick = pendingTick->tick;
+            uint16_t epoch = pendingTick->epoch;
+            const TickData& td = pendingTick->td;
+            const std::vector<LogEvent>& logs = pendingTick->logs;
+
+            // Get log ranges
+            LogRangesPerTxInTick lr{-1};
+            db_try_get_log_ranges(tick, lr);
+
+            // Build and filter transactions
+            std::vector<StreamTx> matchedTxs;
+            size_t totalTxs = 0;
+            for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; ++i) {
+                if (td.transactionDigests[i] == m256i::zero()) continue;
+                totalTxs++;
+
+                std::string txHash = td.transactionDigests[i].toQubicHash();
+                std::vector<uint8_t> txData;
+                if (!db_try_get_transaction(txHash, txData)) continue;
+
+                Transaction* tx = reinterpret_cast<Transaction*>(txData.data());
+                if (!tx) continue;
+
+                StreamTx stx;
+                stx.hash = txHash;
+                stx.from = getIdentity(tx->sourcePublicKey, false);
+                stx.to = getIdentity(tx->destinationPublicKey, false);
+                stx.amount = tx->amount;
+                stx.inputType = tx->inputType;
+                stx.inputSize = tx->inputSize;
+
+                // Copy input data if present
+                if (tx->inputSize > 0 && txData.size() >= sizeof(Transaction) + tx->inputSize) {
+                    const uint8_t* inputPtr = txData.data() + sizeof(Transaction);
+                    stx.inputData.assign(inputPtr, inputPtr + tx->inputSize);
+                }
+
+                // Get execution info from log ranges
+                if (lr.length[i] > 0 && lr.fromLogId[i] >= 0) {
+                    stx.executed = true;
+                    stx.logIdFrom = lr.fromLogId[i];
+                    stx.logIdLength = lr.length[i];
+                } else {
+                    int txIndex;
+                    long long fromLogId, toLogId;
+                    uint64_t txTimestamp;
+                    bool executed;
+                    if (db_get_indexed_tx(txHash.c_str(), txIndex, fromLogId, toLogId, txTimestamp, executed)) {
+                        stx.executed = executed;
+                        stx.logIdFrom = fromLogId;
+                        stx.logIdLength = (toLogId >= fromLogId) ? (toLogId - fromLogId + 1) : 0;
+                    } else {
+                        stx.executed = false;
+                        stx.logIdFrom = -1;
+                        stx.logIdLength = 0;
+                    }
+                }
+
+                // Check if matches any filter
+                if (matchesAnyTxFilter(stx.from, stx.to, stx.amount, stx.inputType, filter)) {
+                    matchedTxs.push_back(std::move(stx));
+                }
+            }
+
+            // Collect matching logs
+            std::vector<std::pair<LogEvent, int>> matchedLogs;
+            for (const auto& log : logs) {
+                if (matchesAnyLogFilter(log, filter)) {
+                    int txIndex = 0;
+                    uint64_t logId = log.getLogId();
+                    for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
+                        if (lr.fromLogId[i] >= 0 && lr.length[i] > 0) {
+                            if (static_cast<int64_t>(logId) >= lr.fromLogId[i] &&
+                                static_cast<int64_t>(logId) < lr.fromLogId[i] + lr.length[i]) {
+                                txIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                    matchedLogs.emplace_back(log, txIndex);
+                }
+            }
+
+            // Check if we should skip this tick
+            bool hasMatches = !matchedTxs.empty() || !matchedLogs.empty();
+            bool isHeartbeatTick = (tick % 120 == 0);
+
+            if (filter.skipEmptyTicks && !hasMatches && !isHeartbeatTick) {
+                // Update lastTick even when skipping
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it != subscriptions_.end()) {
+                    it->second.lastTick = tick;
+                }
+                continue;
+            }
+
+            // Build and send JSON message (not catch-up since these are live ticks)
+            std::string tickJsonStr = buildTickStreamJsonString(
+                tick, epoch, false, td,
+                matchedTxs, matchedLogs,
+                totalTxs, logs.size(),
+                filter.includeInputData);
+
+            std::string msg = "{\"jsonrpc\":\"2.0\",\"method\":\"qubic_subscription\",\"params\":{\"subscription\":\"" +
+                              subId + "\",\"result\":" + tickJsonStr + "}}";
+
+            try {
+                conn->send(msg);
+            } catch (const std::exception& e) {
+                Logger::get()->warn("Failed to send pending tick message: {}", e.what());
+                break;
+            }
+
+            // Update lastTick
+            {
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it != subscriptions_.end()) {
+                    it->second.lastTick = tick;
+                }
+            }
+
+            // Small delay to avoid overwhelming the client
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        // Final check to mark complete if we exited early
         {
             std::unique_lock lock(mutex_);
             auto it = subscriptions_.find(subId);
-            if (it != subscriptions_.end()) {
+            if (it != subscriptions_.end() && it->second.catchUpInProgress) {
                 it->second.catchUpInProgress = false;
+                it->second.pendingTicks.clear();
                 Logger::get()->info("TickStream catch-up {} complete", subId);
             }
         }

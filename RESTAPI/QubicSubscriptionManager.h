@@ -64,6 +64,14 @@ struct StreamTx {
     int64_t logIdLength;
 };
 
+// Pending tick data for catch-up queue
+struct PendingTickData {
+    uint32_t tick;
+    uint16_t epoch;
+    TickData td;
+    std::vector<LogEvent> logs;
+};
+
 // Subscription entry
 struct QubicSubscription {
     std::string id;
@@ -73,6 +81,7 @@ struct QubicSubscription {
     drogon::WebSocketConnectionPtr conn;
     uint32_t lastTick{0};                  // Last tick sent (for TickStream)
     bool catchUpInProgress{false};         // True while catch-up is running
+    std::vector<PendingTickData> pendingTicks;  // Ticks queued during catch-up
 };
 
 class QubicSubscriptionManager {
