@@ -242,24 +242,32 @@ Json::Value QubicRpcMethods::getTransactionReceipt(const std::string& txHashInpu
 
     Transaction* tx = reinterpret_cast<Transaction*>(txData.data());
 
-    // Get indexed transaction info
-    int txIndex;
-    long long fromLogId, toLogId;
-    uint64_t timestamp;
-    bool executed;
-    if (!db_get_indexed_tx(qubicHash.c_str(), txIndex, fromLogId, toLogId, timestamp, executed)) {
-        return Json::Value::null;
-    }
-
     // Get tick data
     TickData td;
     if (!db_try_get_tick_data(tx->tick, td)) {
         return Json::Value::null;
     }
 
-    // Get logs for this transaction
+    // Try to get indexed transaction info (may not be available yet if not indexed)
+    int txIndex = -1;
+    long long fromLogId = -1, toLogId = -1;
+    uint64_t timestamp = 0;
+    bool executed = false;
+    bool hasIndexedData = db_get_indexed_tx(qubicHash.c_str(), txIndex, fromLogId, toLogId, timestamp, executed);
+
+    // If not indexed, find txIndex by scanning tick data
+    if (!hasIndexedData || txIndex < 0) {
+        for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; ++i) {
+            if (td.transactionDigests[i].toQubicHash() == qubicHash) {
+                txIndex = i;
+                break;
+            }
+        }
+    }
+
+    // Get logs for this transaction (if indexed data available)
     std::vector<LogEvent> logs;
-    if (fromLogId >= 0 && toLogId >= fromLogId) {
+    if (hasIndexedData && fromLogId >= 0 && toLogId >= fromLogId) {
         logs = db_try_get_logs(td.epoch, fromLogId, toLogId);
     }
 

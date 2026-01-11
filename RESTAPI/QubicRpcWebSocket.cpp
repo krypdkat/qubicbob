@@ -3,13 +3,28 @@
 #include "QubicSubscriptionManager.h"
 #include "QubicRpcMapper.h"
 #include "Logger.h"
-#include "GlobalVar.h"
+#include "shim.h"
 #include <sstream>
 
 void QubicRpcWebSocket::handleNewConnection(
     const drogon::HttpRequestPtr& req,
     const drogon::WebSocketConnectionPtr& wsConnPtr)
 {
+    // Reject connections until bootstrap is complete
+    if (gCurrentVerifyLoggingTick.load() <= gInitialTick.load()) {
+        Logger::get()->info("Qubic JSON-RPC WebSocket connection rejected (bootstrap in progress) from {}",
+                            req->getPeerAddr().toIpPort());
+        Json::Value error;
+        error["jsonrpc"] = "2.0";
+        error["error"]["code"] = -32000;
+        error["error"]["message"] = "Server is starting up, please try again later";
+        error["id"] = Json::Value::null;
+        Json::FastWriter writer;
+        wsConnPtr->send(writer.write(error));
+        wsConnPtr->shutdown();
+        return;
+    }
+
     Logger::get()->info("Qubic JSON-RPC WebSocket connection from {}",
                         req->getPeerAddr().toIpPort());
 
