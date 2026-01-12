@@ -327,6 +327,9 @@ int runBob(int argc, char *argv[])
             uint32_t network_latest_tick;
             uint16_t network_epoch;
             GetLatestTickFromExternalSources(network_latest_tick, network_epoch);
+            if (network_latest_tick > 0) {
+                gLastSeenNetworkTick.store(network_latest_tick);
+            }
             Logger::get()->info("Local Tick: {} | Network tick: {} | Network epoch: {}",
                                 gCurrentVerifyLoggingTick.load() -1,
                                 network_latest_tick,

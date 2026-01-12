@@ -206,12 +206,12 @@ SyncStatus getSyncStatus() {
     status.currentFetchingLogTick = gCurrentFetchingLogTick.load();
     status.currentVerifyLoggingTick = gCurrentVerifyLoggingTick.load();
     status.currentIndexingTick = gCurrentIndexingTick.load();
-    status.currentNetworkTick = gCurrentNetworkTick.load();
+    status.lastSeenNetworkTick = gLastSeenNetworkTick.load();
 
     // Determine sync status
     uint32_t verifyLoggingTick = status.currentVerifyLoggingTick;
     uint32_t fetchingTick = status.currentFetchingTick;
-    uint32_t networkTick = status.currentNetworkTick;
+    uint32_t networkTick = status.lastSeenNetworkTick;
 
     bool isSynced;
     if (networkTick > 0) {

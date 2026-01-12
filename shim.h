@@ -15,7 +15,7 @@
 #define gCurrentFetchingLogTick   (GS().gCurrentLoggingEventTick)
 #define gCurrentVerifyLoggingTick  (GS().gCurrentVerifyLoggingTick)
 #define gCurrentIndexingTick       (GS().gCurrentIndexingTick)
-#define gCurrentNetworkTick        (GS().gCurrentNetworkTick)
+#define gLastSeenNetworkTick        (GS().gLastSeenNetworkTick)
 #define gReindexFromTick           (GS().gReindexFromTick)
 #define computorsList              (GS().computorsList)
 

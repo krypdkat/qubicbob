@@ -123,8 +123,8 @@ Json::Value QubicRpcMethods::syncing() {
     result["currentIndexingTick"] = status.currentIndexingTick;
 
     // Network tick (0 = unknown/not available)
-    if (status.currentNetworkTick > 0) {
-        result["currentNetworkTick"] = status.currentNetworkTick;
+    if (status.lastSeenNetworkTick > 0) {
+        result["lastSeenNetworkTick"] = status.lastSeenNetworkTick;
     }
 
     if (!status.isSyncing) {

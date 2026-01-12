@@ -207,7 +207,7 @@ Returns sync status with detailed tick progress.
     "syncing": true,
     "epoch": 150,
     "initialTick": 12000000,
-    "currentNetworkTick": 12500000,
+    "lastSeenNetworkTick": 12500000,
     "currentFetchingTick": 12490000,
     "currentFetchingLogTick": 12480000,
     "currentVerifyLoggingTick": 12450000,
@@ -224,7 +224,7 @@ Returns sync status with detailed tick progress.
     "syncing": false,
     "epoch": 150,
     "initialTick": 12000000,
-    "currentNetworkTick": 12500000,
+    "lastSeenNetworkTick": 12500000,
     "currentFetchingTick": 12500000,
     "currentFetchingLogTick": 12500000,
     "currentVerifyLoggingTick": 12500000,
@@ -236,14 +236,14 @@ Returns sync status with detailed tick progress.
 **Tick Status Fields:**
 | Field | Description |
 |-------|-------------|
-| `currentNetworkTick` | Current tick of the Qubic network (omitted if unknown) |
+| `lastSeenNetworkTick` | Last seen tick of the Qubic network (omitted if unknown) |
 | `currentFetchingTick` | Latest tick being fetched from network |
 | `currentFetchingLogTick` | Latest tick with logs being fetched |
 | `currentVerifyLoggingTick` | Latest tick with verified logs |
 | `currentIndexingTick` | Latest tick indexed in database |
 
 **Sync Determination:**
-- If `currentNetworkTick` is available: synced when `currentNetworkTick - 10 <= currentVerifyLoggingTick`
+- If `lastSeenNetworkTick` is available: synced when `lastSeenNetworkTick - 10 <= currentVerifyLoggingTick`
 - Fallback (network tick unknown): synced when `currentFetchingTick - 10 <= currentVerifyLoggingTick`
 
 | Ethereum Equivalent |

@@ -71,7 +71,7 @@ struct SyncStatus {
     uint32_t currentFetchingLogTick = 0;
     uint32_t currentVerifyLoggingTick = 0;
     uint32_t currentIndexingTick = 0;
-    uint32_t currentNetworkTick = 0;  // 0 = unknown
+    uint32_t lastSeenNetworkTick = 0;  // 0 = unknown
     bool isSyncing = false;
     double progress = 0.0;
 };
