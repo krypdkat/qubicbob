@@ -833,17 +833,17 @@ namespace {
 
                         if (!epochStr.empty()) {
                             epoch = static_cast<uint16_t>(std::stoul(epochStr));
-                            // Get epoch boundaries from computors
-                            Computors comps;
-                            if (!db_get_computors(epoch, comps)) {
+                            // Get epoch boundaries from EpochInfo
+                            auto epochInfo = ApiHelpers::getEpochInfo(epoch);
+                            if (epochInfo.initialTick == 0) {
                                 callback(makeError("Epoch " + std::to_string(epoch) + " not found"));
                                 return;
                             }
-                            fromTick = comps.initialTick;
+                            fromTick = epochInfo.initialTick;
                             // Try to get end tick from next epoch or use current tick
-                            Computors nextComps;
-                            if (db_get_computors(epoch + 1, nextComps)) {
-                                toTick = nextComps.initialTick - 1;
+                            auto nextEpochInfo = ApiHelpers::getEpochInfo(epoch + 1);
+                            if (nextEpochInfo.initialTick > 0) {
+                                toTick = nextEpochInfo.initialTick - 1;
                             } else {
                                 // Current epoch - use latest verified tick
                                 toTick = gCurrentVerifyLoggingTick.load();
@@ -883,7 +883,16 @@ namespace {
                             TickData td;
                             bool hasTickData = db_try_get_tick_data(tick, td);
                             bool hasLogRange = db_check_log_range(tick);
-                            long long txCount = db_get_tick_transaction_count(tick);
+
+                            // Count transactions from TickData (non-zero digests)
+                            long long txCount = 0;
+                            if (hasTickData) {
+                                for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
+                                    if (td.transactionDigests[i] != m256i::zero()) {
+                                        txCount++;
+                                    }
+                                }
+                            }
 
                             if (!hasTickData) {
                                 ticksMissing++;
