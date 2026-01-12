@@ -76,6 +76,7 @@ struct GlobalState {
     long long gKvrocksTTL = 1814400;
 
     unsigned gRpcPort = 40420;
+    bool gEnableAdminEndpoints = false;  // Admin endpoints disabled by default
     std::atomic_int gExitDataThreadCounter;
 
     std::string nodeAlias = "Big fat bob";

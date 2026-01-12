@@ -49,6 +49,8 @@ struct AppConfig {
 
     // RPC/REST API port (default 40420)
     unsigned rpc_port = 40420;
+    // Enable admin endpoints (default false for security)
+    bool enable_admin_endpoints = false;
     // allow bob to receive log from incoming connections
     bool allow_receive_log_from_incoming_connections = false;
 

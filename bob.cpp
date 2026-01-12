@@ -95,6 +95,7 @@ int runBob(int argc, char *argv[])
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
     gRpcPort = cfg.rpc_port;
+    gEnableAdminEndpoints = cfg.enable_admin_endpoints;
     gNodeAlias = cfg.nodeAlias;
     using namespace std::chrono;
     gStartTimeUnix = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();

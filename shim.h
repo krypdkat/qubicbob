@@ -52,6 +52,7 @@
 #define gKvrocksTTL (GS().gKvrocksTTL)
 
 #define gRpcPort (GS().gRpcPort)
+#define gEnableAdminEndpoints (GS().gEnableAdminEndpoints)
 #define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
 #define gExitDataThreadCounter (GS().gExitDataThreadCounter)
 #define gStartTimeUnix (GS().startTimeUnix)

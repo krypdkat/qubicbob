@@ -776,8 +776,12 @@ namespace {
                 {Options}
         );
 
-        // POST /_admin/reindex - Force re-indexing from a specific tick (hidden admin endpoint)
-        app().registerHandler(
+        // Admin endpoints - only registered if enabled via config
+        if (gEnableAdminEndpoints) {
+            Logger::get()->info("Admin endpoints enabled");
+
+            // POST /_admin/reindex - Force re-indexing from a specific tick
+            app().registerHandler(
                 "/_admin/reindex",
                 [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
                     try {
@@ -812,6 +816,308 @@ namespace {
                 },
                 {Post}
         );
+
+        // GET /_admin/checkIndexing - Check indexing status for a tick range or epoch
+        app().registerHandler(
+                "/_admin/checkIndexing",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+                    try {
+                        uint32_t fromTick = 0;
+                        uint32_t toTick = 0;
+                        uint16_t epoch = 0;
+
+                        // Check query parameters
+                        auto epochStr = req->getParameter("epoch");
+                        auto fromTickStr = req->getParameter("fromTick");
+                        auto toTickStr = req->getParameter("toTick");
+
+                        if (!epochStr.empty()) {
+                            epoch = static_cast<uint16_t>(std::stoul(epochStr));
+                            // Get epoch boundaries from computors
+                            Computors comps;
+                            if (!db_get_computors(epoch, comps)) {
+                                callback(makeError("Epoch " + std::to_string(epoch) + " not found"));
+                                return;
+                            }
+                            fromTick = comps.initialTick;
+                            // Try to get end tick from next epoch or use current tick
+                            Computors nextComps;
+                            if (db_get_computors(epoch + 1, nextComps)) {
+                                toTick = nextComps.initialTick - 1;
+                            } else {
+                                // Current epoch - use latest verified tick
+                                toTick = gCurrentVerifyLoggingTick.load();
+                            }
+                        } else if (!fromTickStr.empty()) {
+                            fromTick = std::stoul(fromTickStr);
+                            if (!toTickStr.empty()) {
+                                toTick = std::stoul(toTickStr);
+                            } else {
+                                toTick = fromTick + 100; // Default range of 100 ticks
+                            }
+                        } else {
+                            callback(makeError("Either 'epoch' or 'fromTick' parameter is required"));
+                            return;
+                        }
+
+                        // Limit range to prevent excessive queries
+                        const uint32_t MAX_RANGE = 10000;
+                        if (toTick - fromTick > MAX_RANGE) {
+                            toTick = fromTick + MAX_RANGE;
+                        }
+
+                        Json::Value result;
+                        result["fromTick"] = fromTick;
+                        result["toTick"] = toTick;
+                        result["totalTicks"] = toTick - fromTick + 1;
+
+                        uint32_t ticksWithData = 0;
+                        uint32_t ticksWithLogRange = 0;
+                        uint32_t ticksWithTransactions = 0;
+                        uint32_t ticksMissing = 0;
+                        Json::Value missingTicks(Json::arrayValue);
+                        Json::Value tickDetails(Json::arrayValue);
+
+                        // Check each tick
+                        for (uint32_t tick = fromTick; tick <= toTick; tick++) {
+                            TickData td;
+                            bool hasTickData = db_try_get_tick_data(tick, td);
+                            bool hasLogRange = db_check_log_range(tick);
+                            long long txCount = db_get_tick_transaction_count(tick);
+
+                            if (!hasTickData) {
+                                ticksMissing++;
+                                if (missingTicks.size() < 100) { // Limit missing ticks list
+                                    missingTicks.append(tick);
+                                }
+                            } else {
+                                ticksWithData++;
+                            }
+
+                            if (hasLogRange) {
+                                ticksWithLogRange++;
+                            }
+
+                            if (txCount > 0) {
+                                ticksWithTransactions++;
+                            }
+
+                            // For detailed mode, include per-tick info (limit to first 100 for performance)
+                            auto detailedStr = req->getParameter("detailed");
+                            if (!detailedStr.empty() && detailedStr == "true" && tickDetails.size() < 100) {
+                                Json::Value tickInfo;
+                                tickInfo["tick"] = tick;
+                                tickInfo["hasTickData"] = hasTickData;
+                                tickInfo["hasLogRange"] = hasLogRange;
+                                tickInfo["txCount"] = static_cast<Json::Int64>(txCount);
+
+                                if (hasTickData) {
+                                    tickInfo["epoch"] = td.epoch;
+                                    tickInfo["computorIndex"] = td.computorIndex;
+                                }
+
+                                if (hasLogRange) {
+                                    long long logFrom, logLen;
+                                    if (db_try_get_log_range_for_tick(tick, logFrom, logLen)) {
+                                        tickInfo["logRangeFrom"] = static_cast<Json::Int64>(logFrom);
+                                        tickInfo["logRangeLength"] = static_cast<Json::Int64>(logLen);
+                                    }
+                                }
+
+                                tickDetails.append(tickInfo);
+                            }
+                        }
+
+                        result["ticksWithData"] = ticksWithData;
+                        result["ticksWithLogRange"] = ticksWithLogRange;
+                        result["ticksWithTransactions"] = ticksWithTransactions;
+                        result["ticksMissing"] = ticksMissing;
+
+                        if (!missingTicks.empty()) {
+                            result["missingTicks"] = missingTicks;
+                            if (ticksMissing > 100) {
+                                result["missingTicksTruncated"] = true;
+                            }
+                        }
+
+                        if (!tickDetails.empty()) {
+                            result["details"] = tickDetails;
+                            if (toTick - fromTick + 1 > 100) {
+                                result["detailsTruncated"] = true;
+                            }
+                        }
+
+                        // Summary status
+                        double completeness = static_cast<double>(ticksWithData) / static_cast<double>(toTick - fromTick + 1) * 100.0;
+                        result["completeness"] = completeness;
+                        result["status"] = (ticksMissing == 0) ? "complete" : (completeness > 95.0 ? "mostly_complete" : "incomplete");
+
+                        // Add current indexing state
+                        result["currentState"]["lastIndexedTick"] = static_cast<Json::Int64>(db_get_last_indexed_tick());
+                        result["currentState"]["currentIndexingTick"] = gCurrentIndexingTick.load();
+                        result["currentState"]["currentVerifyLoggingTick"] = gCurrentVerifyLoggingTick.load();
+
+                        auto resp = HttpResponse::newHttpJsonResponse(result);
+                        callback(resp);
+                    } catch (const std::exception &ex) {
+                        callback(makeError(std::string("checkIndexing error: ") + ex.what(), k500InternalServerError));
+                    }
+                },
+                {Get}
+        );
+
+        // GET /_admin/checkTransactions - Check transaction indexing consistency for a tick range
+        // Finds transactions with logs that aren't marked as executed, or vice versa
+        app().registerHandler(
+                "/_admin/checkTransactions",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+                    try {
+                        uint32_t fromTick = 0;
+                        uint32_t toTick = 0;
+
+                        auto fromTickStr = req->getParameter("fromTick");
+                        auto toTickStr = req->getParameter("toTick");
+
+                        if (fromTickStr.empty()) {
+                            callback(makeError("fromTick parameter is required"));
+                            return;
+                        }
+
+                        fromTick = std::stoul(fromTickStr);
+                        if (!toTickStr.empty()) {
+                            toTick = std::stoul(toTickStr);
+                        } else {
+                            toTick = fromTick + 100;
+                        }
+
+                        // Limit range
+                        const uint32_t MAX_RANGE = 1000;
+                        if (toTick - fromTick > MAX_RANGE) {
+                            toTick = fromTick + MAX_RANGE;
+                        }
+
+                        Json::Value result;
+                        result["fromTick"] = fromTick;
+                        result["toTick"] = toTick;
+
+                        uint32_t totalTxChecked = 0;
+                        uint32_t txWithLogsNotExecuted = 0;
+                        uint32_t txExecutedNoLogs = 0;
+                        uint32_t txConsistent = 0;
+                        uint32_t txNotIndexed = 0;
+
+                        Json::Value inconsistentTxs(Json::arrayValue);
+
+                        // Check each tick
+                        for (uint32_t tick = fromTick; tick <= toTick; tick++) {
+                            TickData td;
+                            if (!db_try_get_tick_data(tick, td)) {
+                                continue;
+                            }
+
+                            // Check log ranges for this tick to get transaction hashes
+                            LogRangesPerTxInTick logRange;
+                            if (!db_try_get_log_ranges(tick, logRange)) {
+                                continue;
+                            }
+
+                            // Iterate through transaction digests in tick data
+                            for (int i = 0; i < NUMBER_OF_TRANSACTIONS_PER_TICK; i++) {
+                                // Check if this transaction slot has a digest (not all zeros)
+                                bool hasDigest = false;
+                                for (int j = 0; j < 32; j++) {
+                                    if (td.transactionDigests[i].m256i_u8[j] != 0) {
+                                        hasDigest = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!hasDigest) {
+                                    continue;
+                                }
+
+                                // Convert digest to hash string
+                                char hashStr[64] = {0};
+                                getIdentityFromPublicKey(td.transactionDigests[i].m256i_u8, hashStr, true);
+                                std::string txHash(hashStr);
+
+                                totalTxChecked++;
+
+                                // Get indexed transaction data
+                                int txIndex = -1;
+                                long long fromLogId = -1, toLogId = -1;
+                                uint64_t timestamp = 0;
+                                bool executed = false;
+
+                                bool hasIndexedData = db_get_indexed_tx(txHash.c_str(), txIndex, fromLogId, toLogId, timestamp, executed);
+
+                                if (!hasIndexedData) {
+                                    txNotIndexed++;
+                                    continue;
+                                }
+
+                                bool hasLogs = (fromLogId >= 0 && toLogId >= fromLogId);
+
+                                // Check consistency
+                                if (hasLogs && !executed) {
+                                    // Has logs but not marked as executed - this is the bug case
+                                    txWithLogsNotExecuted++;
+                                    if (inconsistentTxs.size() < 100) {
+                                        Json::Value txInfo;
+                                        txInfo["txHash"] = txHash;
+                                        txInfo["tick"] = tick;
+                                        txInfo["txIndex"] = txIndex;
+                                        txInfo["fromLogId"] = static_cast<Json::Int64>(fromLogId);
+                                        txInfo["toLogId"] = static_cast<Json::Int64>(toLogId);
+                                        txInfo["executed"] = executed;
+                                        txInfo["issue"] = "has_logs_not_executed";
+                                        inconsistentTxs.append(txInfo);
+                                    }
+                                } else if (!hasLogs && executed) {
+                                    // Marked as executed but no logs - might be valid for some tx types
+                                    // but worth flagging for review
+                                    txExecutedNoLogs++;
+                                    if (inconsistentTxs.size() < 100) {
+                                        Json::Value txInfo;
+                                        txInfo["txHash"] = txHash;
+                                        txInfo["tick"] = tick;
+                                        txInfo["txIndex"] = txIndex;
+                                        txInfo["fromLogId"] = static_cast<Json::Int64>(fromLogId);
+                                        txInfo["toLogId"] = static_cast<Json::Int64>(toLogId);
+                                        txInfo["executed"] = executed;
+                                        txInfo["issue"] = "executed_no_logs";
+                                        inconsistentTxs.append(txInfo);
+                                    }
+                                } else {
+                                    txConsistent++;
+                                }
+                            }
+                        }
+
+                        result["totalTxChecked"] = totalTxChecked;
+                        result["txConsistent"] = txConsistent;
+                        result["txNotIndexed"] = txNotIndexed;
+                        result["txWithLogsNotExecuted"] = txWithLogsNotExecuted;
+                        result["txExecutedNoLogs"] = txExecutedNoLogs;
+
+                        if (!inconsistentTxs.empty()) {
+                            result["inconsistentTransactions"] = inconsistentTxs;
+                            if (txWithLogsNotExecuted + txExecutedNoLogs > 100) {
+                                result["inconsistentTruncated"] = true;
+                            }
+                        }
+
+                        result["status"] = (txWithLogsNotExecuted == 0 && txExecutedNoLogs == 0) ? "consistent" : "inconsistent";
+
+                        auto resp = HttpResponse::newHttpJsonResponse(result);
+                        callback(resp);
+                    } catch (const std::exception &ex) {
+                        callback(makeError(std::string("checkTransactions error: ") + ex.what(), k500InternalServerError));
+                    }
+                },
+                {Get}
+            );
+        } // end if (gEnableAdminEndpoints)
 
     }
 

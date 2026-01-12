@@ -129,6 +129,15 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     if (!validate_uint("server-port", out.server_port)) return false;
     if (!validate_uint("rpc-port", out.rpc_port)) return false;
 
+    // Enable admin endpoints (default false)
+    if (root.isMember("enable-admin-endpoints")) {
+        if (!root["enable-admin-endpoints"].isBool()) {
+            error = "Invalid type: boolean required for key 'enable-admin-endpoints'";
+            return false;
+        }
+        out.enable_admin_endpoints = root["enable-admin-endpoints"].asBool();
+    }
+
     // Maximum threads the system can use (0 means auto/unlimited)
     if (!validate_uint("max-thread", out.max_thread)) return false;
     if (out.max_thread == 0)
