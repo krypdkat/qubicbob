@@ -81,3 +81,70 @@ bool DownloadStateFiles(uint16_t epoch)
     return true;
 }
 
+void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
+{
+    // Try primary API
+    auto client1 = drogon::HttpClient::newHttpClient("https://api.qubic.global");
+    auto req1 = drogon::HttpRequest::newHttpRequest();
+    req1->setMethod(drogon::Get);
+    req1->setPath("/currenttick");
+
+    auto [result1, response1] = client1->sendRequest(req1);
+
+    if (result1 == drogon::ReqResult::Ok && response1)
+    {
+        auto jsonPtr = response1->getJsonObject();
+        if (jsonPtr && jsonPtr->isMember("tick") && jsonPtr->isMember("epoch"))
+        {
+            tick = (*jsonPtr)["tick"].asUInt();
+            epoch = static_cast<uint16_t>((*jsonPtr)["epoch"].asUInt());
+            return;
+        }
+    }
+
+    // Try first failover API
+    auto client2 = drogon::HttpClient::newHttpClient("https://api.qubic.li");
+    auto req2 = drogon::HttpRequest::newHttpRequest();
+    req2->setMethod(drogon::Get);
+    req2->setPath("/public/currenttick");
+
+    auto [result2, response2] = client2->sendRequest(req2);
+
+    if (result2 == drogon::ReqResult::Ok && response2)
+    {
+        auto jsonPtr = response2->getJsonObject();
+        if (jsonPtr && jsonPtr->isMember("tick") && jsonPtr->isMember("epoch"))
+        {
+            tick = (*jsonPtr)["tick"].asUInt();
+            epoch = static_cast<uint16_t>((*jsonPtr)["epoch"].asUInt());
+            return;
+        }
+    }
+
+    // Try final failover API with different response structure
+    auto client3 = drogon::HttpClient::newHttpClient("https://rpc.qubic.org");
+    auto req3 = drogon::HttpRequest::newHttpRequest();
+    req3->setMethod(drogon::Get);
+    req3->setPath("/live/v1/tick-info");
+
+    auto [result3, response3] = client3->sendRequest(req3);
+
+    if (result3 == drogon::ReqResult::Ok && response3)
+    {
+        auto jsonPtr = response3->getJsonObject();
+        if (jsonPtr && jsonPtr->isMember("tickInfo"))
+        {
+            const auto& tickInfo = (*jsonPtr)["tickInfo"];
+            if (tickInfo.isMember("tick") && tickInfo.isMember("epoch"))
+            {
+                tick = tickInfo["tick"].asUInt();
+                epoch = static_cast<uint16_t>(tickInfo["epoch"].asUInt());
+                return;
+            }
+        }
+    }
+
+    // If all APIs fail, set to 0
+    tick = 0;
+    epoch = 0;
+}

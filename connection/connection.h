@@ -112,3 +112,4 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
 void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity);
 std::vector<std::string> GetPeerFromDNS();
 bool DownloadStateFiles(uint16_t epoch);
+void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch);
