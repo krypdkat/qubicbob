@@ -43,6 +43,7 @@ static inline void set_this_thread_name(const char* name_in) {
 
 void requestToExitBob()
 {
+    gExitDataThreadCounter = 0;
     stopFlag = true;
 }
 
@@ -82,6 +83,7 @@ int runBob(int argc, char *argv[])
         getPublicKeyFromPrivateKey(nodePrivatekey.m256i_u8, nodePublickey.m256i_u8);
         char identity[64] = {0};
         getIdentityFromPublicKey(nodePublickey.m256i_u8, identity, false);
+        nodeIdentity = identity;
         if (cfg.node_seed == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             Logger::get()->warn("Using default bob seed: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     }
@@ -93,6 +95,9 @@ int runBob(int argc, char *argv[])
     gMaxThreads = cfg.max_thread;
     gKvrocksTTL = cfg.kvrocks_ttl;
     gRpcPort = cfg.rpc_port;
+    gNodeAlias = cfg.nodeAlias;
+    using namespace std::chrono;
+    gStartTimeUnix = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
 
     // Defaults for new knobs are already in AppConfig
@@ -318,9 +323,10 @@ int runBob(int argc, char *argv[])
             uint32_t network_latest_tick;
             uint16_t network_epoch;
             GetLatestTickFromExternalSources(network_latest_tick, network_epoch);
-            Logger::get()->info("Local Tick: ", gCurrentVerifyLoggingTick.load() -1,
-                                " | Network tick: ", network_latest_tick,
-                                " | Network epoch: ", network_epoch);
+            Logger::get()->info("Local Tick: {} | Network tick: {} | Network epoch: {}",
+                                gCurrentVerifyLoggingTick.load() -1,
+                                network_latest_tick,
+                                network_epoch);
         }
     }
     // Signal stop, disconnect sockets first to break any blocking I/O.
@@ -362,7 +368,7 @@ int runBob(int argc, char *argv[])
 
     // Wake all data threads so none remain blocked on MRB.
     int N_data_thread = v_data_thread.size();
-    gExitDataThreadCounter = 0;
+    Logger::get()->info("Exiting {} data thread", N_data_thread);
     while (N_data_thread > gExitDataThreadCounter.load())
     {
         const size_t wake_count = v_data_thread.size() * 8; // ensure enough tokens

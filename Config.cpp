@@ -149,6 +149,13 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.node_seed = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     }
 
+    if (root.isMember("node-alias")) {
+        if (!root["node-alias"].isString()) {
+            error = "Invalid type: string required for key 'node-alias'";
+            return false;
+        }
+        out.nodeAlias = root["node-alias"].asString();
+    }
 
     // Parse 'tick-storage-mode' and related options
     {

@@ -51,6 +51,8 @@ struct AppConfig {
     unsigned rpc_port = 40420;
     // allow bob to receive log from incoming connections
     bool allow_receive_log_from_incoming_connections = false;
+
+    std::string nodeAlias = "Big fat bob";
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

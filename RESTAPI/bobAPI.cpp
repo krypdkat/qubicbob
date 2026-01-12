@@ -500,8 +500,39 @@ std::string getCustomLog(uint32_t scIndex, uint32_t logType,
 
 std::string bobGetExtraStatus()
 {
+    Json::Value root;
+    root["type"] = "bob";
+    root["version"] = BOB_VERSION;
+    root["alias"] = gNodeAlias;
+    auto current = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    root["uptime"] = current -gStartTimeUnix;
+    root["timestamp"] = current;
+    root["operator"] = nodeIdentity;
+    struct {
+        char type[4];
+        char version[16];
+        char alias[12];
+        uint64_t uptime;
+        uint64_t timestamp;
+        uint8_t op[32];
+    } data;
+    memset(&data, 0, sizeof(data));
+    memcpy(data.type, "bob", 3);
+    memcpy(data.version, BOB_VERSION, std::min(int(strlen(BOB_VERSION)),16));
+    memcpy(data.alias, gNodeAlias.data(), std::min(int(gNodeAlias.size()),12));
+    data.uptime = current -gStartTimeUnix;
+    data.timestamp = current;
+    memcpy(data.op, nodePublickey.m256i_u8, 32);
 
+    uint8_t hash[32];
+    KangarooTwelve((uint8_t *) &data, sizeof(data), hash, 32);
+    uint8_t signature[64];
+    sign(nodeSubseed.m256i_u8, nodePublickey.m256i_u8, hash, signature);
+    root["signature"] = byteToHexStr(signature, 64);
+    Json::FastWriter writer;
+    return writer.write(root);
 }
+
 std::string bobGetStatus()
 {
     return std::string("{") +
@@ -514,6 +545,7 @@ std::string bobGetStatus()
             R"(,"bobVersion": ")" + BOB_VERSION + "\""
             ",\"bobVersionGitHash\": \"" + GIT_COMMIT_HASH + "\""
             ",\"bobCompiler\": \"" + COMPILER_NAME + "\""
+            ",\"extraInfo\": " + bobGetExtraStatus() +
            "}";
 }
 

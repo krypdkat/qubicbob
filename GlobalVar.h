@@ -52,6 +52,7 @@ struct GlobalState {
     m256i nodeSubseed;
     m256i nodePublickey;
     m256i nodePrivatekey;
+    std::string nodeIdentity;
 
     bool gIsEndEpoch = false;
     bool gAllowReceiveLogFromIncomingConnection = false;
@@ -74,6 +75,10 @@ struct GlobalState {
 
     unsigned gRpcPort = 40420;
     std::atomic_int gExitDataThreadCounter;
+
+    std::string nodeAlias = "Big fat bob";
+
+    uint64_t startTimeUnix = 0;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.
