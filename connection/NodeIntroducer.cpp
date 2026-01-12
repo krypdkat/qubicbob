@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdlib>
 #include <cstdint>
+#include "Logger.h"
 
 std::vector<std::string> GetPeerFromDNS()
 {
@@ -147,4 +148,29 @@ void GetLatestTickFromExternalSources(uint32_t& tick, uint16_t& epoch)
     // If all APIs fail, set to 0
     tick = 0;
     epoch = 0;
+}
+
+void CheckInQubicGlobal()
+{
+    // Declare the external function
+    extern std::string bobGetExtraStatus();
+
+    // Get the JSON string data
+    std::string jsonData = bobGetExtraStatus();
+
+    // Create HTTP client and request
+    auto client = drogon::HttpClient::newHttpClient("https://api.qubic.global");
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setMethod(drogon::Post);
+    req->setPath("/checkin");
+    req->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+    req->setBody(jsonData);
+
+    // Send the request
+    auto [result, response] = client->sendRequest(req);
+
+    if (result == drogon::ReqResult::Ok && response)
+    {
+        Logger::get()->info("Successfully checked in qubic.global");
+    }
 }

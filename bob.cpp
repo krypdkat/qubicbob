@@ -289,6 +289,8 @@ int runBob(int argc, char *argv[])
     uint32_t prevIndexingTick = 0;
     const long long sleep_time = 5;
     int compareLocalTickWithNetworkCount = 0;
+    int checkInQubicGlobalCount = 0;
+    CheckInQubicGlobal();
     auto start_time = std::chrono::high_resolution_clock::now();
     while (!stopFlag.load())
     {
@@ -327,6 +329,11 @@ int runBob(int argc, char *argv[])
                                 gCurrentVerifyLoggingTick.load() -1,
                                 network_latest_tick,
                                 network_epoch);
+        }
+        if (checkInQubicGlobalCount++ >= 361)
+        {
+            checkInQubicGlobalCount = 0;
+            CheckInQubicGlobal();
         }
     }
     // Signal stop, disconnect sockets first to break any blocking I/O.
