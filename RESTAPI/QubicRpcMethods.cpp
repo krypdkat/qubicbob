@@ -815,3 +815,213 @@ bool QubicRpcMethods::unsubscribe(
 {
     return QubicSubscriptionManager::instance().unsubscribe(conn, subscriptionId);
 }
+
+// ============================================================================
+// Epoch Methods
+// ============================================================================
+
+Json::Value QubicRpcMethods::getEpochInfo(uint16_t epoch) {
+    std::string jsonStr = bobGetEpochInfo(epoch);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse epoch info";
+        return error;
+    }
+
+    return result;
+}
+
+Json::Value QubicRpcMethods::getEndEpochLogs(uint16_t epoch) {
+    std::string jsonStr = bobGetEndEpochLog(epoch);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse end epoch logs";
+        return error;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// Transfer History Methods
+// ============================================================================
+
+Json::Value QubicRpcMethods::getQuTransfers(const Json::Value& filterParams) {
+    // Validate required parameters
+    if (!filterParams.isMember("identity") || !filterParams["identity"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: identity";
+        return error;
+    }
+    if (!filterParams.isMember("fromTick") || !filterParams["fromTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: fromTick";
+        return error;
+    }
+    if (!filterParams.isMember("toTick") || !filterParams["toTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: toTick";
+        return error;
+    }
+
+    std::string identity = normalizeIdentity(filterParams["identity"].asString());
+    if (identity.empty()) {
+        Json::Value error;
+        error["error"] = "Invalid identity format";
+        return error;
+    }
+
+    uint32_t fromTick = filterParams["fromTick"].asUInt();
+    uint32_t toTick = filterParams["toTick"].asUInt();
+
+    std::string jsonStr = getQuTransfersForIdentity(fromTick, toTick, identity);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse transfers";
+        return error;
+    }
+
+    return result;
+}
+
+Json::Value QubicRpcMethods::getAssetTransfers(const Json::Value& filterParams) {
+    // Validate required parameters
+    if (!filterParams.isMember("identity") || !filterParams["identity"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: identity";
+        return error;
+    }
+    if (!filterParams.isMember("issuer") || !filterParams["issuer"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: issuer";
+        return error;
+    }
+    if (!filterParams.isMember("assetName") || !filterParams["assetName"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: assetName";
+        return error;
+    }
+    if (!filterParams.isMember("fromTick") || !filterParams["fromTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: fromTick";
+        return error;
+    }
+    if (!filterParams.isMember("toTick") || !filterParams["toTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: toTick";
+        return error;
+    }
+
+    std::string identity = normalizeIdentity(filterParams["identity"].asString());
+    if (identity.empty()) {
+        Json::Value error;
+        error["error"] = "Invalid identity format";
+        return error;
+    }
+
+    std::string issuer = normalizeIdentity(filterParams["issuer"].asString());
+    if (issuer.empty()) {
+        Json::Value error;
+        error["error"] = "Invalid issuer format";
+        return error;
+    }
+
+    std::string assetName = filterParams["assetName"].asString();
+    if (assetName.empty() || assetName.size() > 7) {
+        Json::Value error;
+        error["error"] = "Invalid assetName (must be 1-7 characters)";
+        return error;
+    }
+
+    uint32_t fromTick = filterParams["fromTick"].asUInt();
+    uint32_t toTick = filterParams["toTick"].asUInt();
+
+    std::string jsonStr = getAssetTransfersForIdentity(fromTick, toTick, identity, issuer, assetName);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse asset transfers";
+        return error;
+    }
+
+    return result;
+}
+
+Json::Value QubicRpcMethods::getAllAssetTransfers(const Json::Value& filterParams) {
+    // Validate required parameters
+    if (!filterParams.isMember("issuer") || !filterParams["issuer"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: issuer";
+        return error;
+    }
+    if (!filterParams.isMember("assetName") || !filterParams["assetName"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: assetName";
+        return error;
+    }
+    if (!filterParams.isMember("fromTick") || !filterParams["fromTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: fromTick";
+        return error;
+    }
+    if (!filterParams.isMember("toTick") || !filterParams["toTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: toTick";
+        return error;
+    }
+
+    std::string issuer = normalizeIdentity(filterParams["issuer"].asString());
+    if (issuer.empty()) {
+        Json::Value error;
+        error["error"] = "Invalid issuer format";
+        return error;
+    }
+
+    std::string assetName = filterParams["assetName"].asString();
+    if (assetName.empty() || assetName.size() > 7) {
+        Json::Value error;
+        error["error"] = "Invalid assetName (must be 1-7 characters)";
+        return error;
+    }
+
+    uint32_t fromTick = filterParams["fromTick"].asUInt();
+    uint32_t toTick = filterParams["toTick"].asUInt();
+
+    std::string jsonStr = ::getAllAssetTransfers(fromTick, toTick, issuer, assetName);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse all asset transfers";
+        return error;
+    }
+
+    return result;
+}

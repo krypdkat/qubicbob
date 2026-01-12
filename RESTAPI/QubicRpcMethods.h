@@ -93,6 +93,49 @@ public:
     static Json::Value getLogs(const Json::Value& filterParams);
 
     // ========================================================================
+    // Epoch Methods
+    // ========================================================================
+
+    // qubic_getEpochInfo - Returns epoch info (tick range, log boundaries)
+    // @param epoch: epoch number
+    static Json::Value getEpochInfo(uint16_t epoch);
+
+    // qubic_getEndEpochLogs - Returns end-of-epoch logs
+    // @param epoch: epoch number
+    static Json::Value getEndEpochLogs(uint16_t epoch);
+
+    // ========================================================================
+    // Transfer History Methods
+    // ========================================================================
+
+    // qubic_getQuTransfers - Returns QU transfer history for an identity
+    // @param filterParams: JSON object with fields:
+    //   - identity: 60-char Qubic identity (required)
+    //   - fromTick: starting tick number (required)
+    //   - toTick: ending tick number (required, max range 1000)
+    // Returns: { "in": [...txHashes], "out": [...txHashes] }
+    static Json::Value getQuTransfers(const Json::Value& filterParams);
+
+    // qubic_getAssetTransfers - Returns asset transfer history for an identity
+    // @param filterParams: JSON object with fields:
+    //   - identity: 60-char Qubic identity (required)
+    //   - issuer: asset issuer identity (required)
+    //   - assetName: asset name up to 7 chars (required)
+    //   - fromTick: starting tick number (required)
+    //   - toTick: ending tick number (required, max range 1000)
+    // Returns: { "in": [...txHashes], "out": [...txHashes] }
+    static Json::Value getAssetTransfers(const Json::Value& filterParams);
+
+    // qubic_getAllAssetTransfers - Returns all transfers for a specific asset
+    // @param filterParams: JSON object with fields:
+    //   - issuer: asset issuer identity (required)
+    //   - assetName: asset name up to 7 chars (required)
+    //   - fromTick: starting tick number (required)
+    //   - toTick: ending tick number (required, max range 1000)
+    // Returns: array of transaction hashes
+    static Json::Value getAllAssetTransfers(const Json::Value& filterParams);
+
+    // ========================================================================
     // Subscription Methods (WebSocket only)
     // ========================================================================
 

@@ -198,6 +198,50 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
             return makeResult(id, QubicRpcMethods::getLogs(params[0]));
         }
 
+        // ====================================================================
+        // Epoch Methods
+        // ====================================================================
+        if (method == "qubic_getEpochInfo") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing epoch parameter");
+            }
+            if (!params[0].isNumeric()) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Epoch must be a number");
+            }
+            return makeResult(id, QubicRpcMethods::getEpochInfo(params[0].asUInt()));
+        }
+        if (method == "qubic_getEndEpochLogs") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing epoch parameter");
+            }
+            if (!params[0].isNumeric()) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Epoch must be a number");
+            }
+            return makeResult(id, QubicRpcMethods::getEndEpochLogs(params[0].asUInt()));
+        }
+
+        // ====================================================================
+        // Transfer History Methods
+        // ====================================================================
+        if (method == "qubic_getQuTransfers") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing filter parameter");
+            }
+            return makeResult(id, QubicRpcMethods::getQuTransfers(params[0]));
+        }
+        if (method == "qubic_getAssetTransfers") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing filter parameter");
+            }
+            return makeResult(id, QubicRpcMethods::getAssetTransfers(params[0]));
+        }
+        if (method == "qubic_getAllAssetTransfers") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing filter parameter");
+            }
+            return makeResult(id, QubicRpcMethods::getAllAssetTransfers(params[0]));
+        }
+
         // Method not found - return null so caller can handle subscription methods
         return Json::Value::null;
 

@@ -285,6 +285,83 @@ Returns current epoch info including tick range and log boundaries.
 
 ---
 
+#### qubic_getEpochInfo
+Returns epoch info for any epoch (current or historical).
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | number | Epoch number |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getEpochInfo",
+  "params": [192],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": {
+    "epoch": 192,
+    "initialTick": 39862000,
+    "endTick": 40100000,
+    "endTickStartLogId": 1234567890,
+    "endTickEndLogId": 1234569000
+  }
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (Qubic-specific) |
+
+---
+
+#### qubic_getEndEpochLogs
+Returns the logs from the end-of-epoch tick. These logs contain epoch-ending protocol events.
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | number | Epoch number |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getEndEpochLogs",
+  "params": [192],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": [
+    {
+      "logId": 1234567890,
+      "tick": 40100000,
+      "type": 6,
+      "scIndex": 0,
+      "data": "...",
+      "extraData": "..."
+    }
+  ]
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (Qubic-specific) |
+
+---
+
 ### Tick Methods
 
 #### qubic_getTickNumber
@@ -683,6 +760,144 @@ Returns asset balance for an identity.
 | Ethereum Equivalent |
 |---------------------|
 | ERC-20 `balanceOf` call |
+
+---
+
+### Transfer History Methods
+
+These methods provide transaction history filtering by identity.
+
+#### qubic_getQuTransfers
+Returns QU transfer history for an identity, separated into incoming and outgoing transfers.
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | object | Filter object with `identity`, `fromTick`, `toTick` |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getQuTransfers",
+  "params": [{
+    "identity": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+    "fromTick": 41000000,
+    "toTick": 41000100
+  }],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": {
+    "in": [
+      "bxlilwtegxfdwxzrqquxjfsctqqxltxskfexqqdrhrtlfqhvgbxugqrkhbrgsj"
+    ],
+    "out": [
+      "ayrltrgxfdwxzrqquxjfsctqqxltxskfexqqdrhrtlfqhvgbxugqrkhbrgsk"
+    ]
+  }
+}
+```
+
+**Constraints:**
+- Maximum tick range: 1000 ticks
+- Returns transaction hashes (60-char Qubic format)
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_getLogs` with Transfer event filter for address |
+
+---
+
+#### qubic_getAssetTransfers
+Returns asset transfer history for an identity and specific asset.
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | object | Filter object with `identity`, `issuer`, `assetName`, `fromTick`, `toTick` |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getAssetTransfers",
+  "params": [{
+    "identity": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+    "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+    "assetName": "QFT",
+    "fromTick": 41000000,
+    "toTick": 41000100
+  }],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": {
+    "in": ["txhash1..."],
+    "out": ["txhash2..."]
+  }
+}
+```
+
+**Constraints:**
+- Maximum tick range: 1000 ticks
+- `assetName` max 7 characters
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_getLogs` with ERC-20 Transfer event filter |
+
+---
+
+#### qubic_getAllAssetTransfers
+Returns all transfers for a specific asset (without identity filter).
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | object | Filter object with `issuer`, `assetName`, `fromTick`, `toTick` |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getAllAssetTransfers",
+  "params": [{
+    "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+    "assetName": "QFT",
+    "fromTick": 41000000,
+    "toTick": 41000100
+  }],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": [
+    "txhash1...",
+    "txhash2...",
+    "txhash3..."
+  ]
+}
+```
+
+**Constraints:**
+- Maximum tick range: 1000 ticks
+- Returns array of transaction hashes
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_getLogs` with ERC-20 Transfer event (all transfers for token) |
 
 ---
 
