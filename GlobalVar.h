@@ -79,6 +79,8 @@ struct GlobalState {
     std::string nodeAlias = "Big fat bob";
 
     uint64_t startTimeUnix = 0;
+
+    bool allowCheckInQubicGlobal = true;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.

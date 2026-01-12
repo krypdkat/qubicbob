@@ -53,6 +53,8 @@ struct AppConfig {
     bool allow_receive_log_from_incoming_connections = false;
 
     std::string nodeAlias = "Big fat bob";
+
+    bool allow_check_in_qubic_global = true;
 };
 
 // Returns true on success; on failure returns false and fills error with a human-readable message.

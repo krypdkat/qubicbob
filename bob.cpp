@@ -98,6 +98,7 @@ int runBob(int argc, char *argv[])
     gNodeAlias = cfg.nodeAlias;
     using namespace std::chrono;
     gStartTimeUnix = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    gAllowCheckInQubicGlobal = cfg.allow_check_in_qubic_global;
     gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
 
     // Defaults for new knobs are already in AppConfig
@@ -330,7 +331,7 @@ int runBob(int argc, char *argv[])
                                 network_latest_tick,
                                 network_epoch);
         }
-        if (checkInQubicGlobalCount++ >= 361)
+        if (checkInQubicGlobalCount++ >= 361 && gAllowCheckInQubicGlobal)
         {
             checkInQubicGlobalCount = 0;
             CheckInQubicGlobal();

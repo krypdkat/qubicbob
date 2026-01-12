@@ -52,5 +52,5 @@
 #define gRpcPort (GS().gRpcPort)
 #define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
 #define gExitDataThreadCounter (GS().gExitDataThreadCounter)
-#define gExitDataThreadCounter (GS().gExitDataThreadCounter)
 #define gStartTimeUnix (GS().startTimeUnix)
+#define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)

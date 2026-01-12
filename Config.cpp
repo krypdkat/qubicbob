@@ -311,6 +311,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("allow-check-in-qubic-global")) {
+        if (!root["allow-check-in-qubic-global"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-check-in-qubic-global'";
+            return false;
+        }
+        out.allow_check_in_qubic_global = root["allow-check-in-qubic-global"].asBool();
+    }
+
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {
         if (out.tx_storage_mode != TxStorageMode::LastNTick && out.tx_storage_mode != TxStorageMode::Free)
