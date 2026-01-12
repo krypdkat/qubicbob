@@ -76,6 +76,12 @@ struct SyncStatus {
     double progress = 0.0;
 };
 
+struct BroadcastResult {
+    bool success = false;
+    std::string txHash;      // Transaction hash (60-char Qubic format) on success
+    std::string error;       // Error message on failure
+};
+
 // ============================================================================
 // Shared Helper Functions (Core Logic)
 // ============================================================================
@@ -102,6 +108,11 @@ EpochInfo getCurrentEpochInfo();
 
 // Get sync status
 SyncStatus getSyncStatus();
+
+// Broadcast a signed transaction
+// @param signedTxHex: hex-encoded signed transaction (with or without 0x prefix)
+// @return BroadcastResult with txHash on success, error message on failure
+BroadcastResult broadcastTransaction(const std::string& signedTxHex);
 
 // ============================================================================
 // Utility Functions

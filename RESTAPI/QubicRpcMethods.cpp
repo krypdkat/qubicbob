@@ -308,11 +308,16 @@ Json::Value QubicRpcMethods::getTransactionReceipt(const std::string& txHashInpu
 }
 
 Json::Value QubicRpcMethods::broadcastTransaction(const std::string& signedTxHex) {
-    // TODO: Implement transaction broadcast
-    // This requires integration with the transaction broadcast system
-    Json::Value error(Json::objectValue);
-    error["error"] = "Transaction broadcast not yet implemented";
-    return error;
+    auto result = ApiHelpers::broadcastTransaction(signedTxHex);
+
+    if (!result.success) {
+        Json::Value error(Json::objectValue);
+        error["error"] = result.error;
+        return error;
+    }
+
+    // Return transaction hash on success (similar to eth_sendRawTransaction)
+    return result.txHash;
 }
 
 // ============================================================================

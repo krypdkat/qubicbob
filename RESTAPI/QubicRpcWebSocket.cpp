@@ -196,7 +196,7 @@ Json::Value QubicRpcWebSocket::dispatchMethod(
             }
             return makeResult(id, QubicRpcMethods::getTransactionReceipt(params[0].asString()));
         }
-        if (method == "qubic_broadcastTransaction") {
+        if (method == "qubic_broadcastTransaction" || method == "qubic_sendRawTransaction") {
             if (!params.isArray() || params.size() < 1) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing signed transaction parameter");
             }

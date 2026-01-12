@@ -3,7 +3,9 @@
 #include "Entity.h"
 #include "Asset.h"
 #include "GlobalVar.h"
+#include "shim.h"
 #include "database/db.h"
+#include "structs.h"
 #include <sstream>
 #include <iomanip>
 #include <cstring>
@@ -232,6 +234,90 @@ SyncStatus getSyncStatus() {
     }
 
     return status;
+}
+
+// ============================================================================
+// Broadcast Transaction Functions
+// ============================================================================
+
+BroadcastResult broadcastTransaction(const std::string& signedTxHex) {
+    BroadcastResult result;
+
+    // Check if Bob has any connections to broadcast through
+    if (gNumBMConnection == 0) {
+        result.error = "Bob has no connection to any BM";
+        return result;
+    }
+
+    // Strip 0x prefix if present
+    std::string hex = signedTxHex;
+    if (hex.size() >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) {
+        hex = hex.substr(2);
+    }
+
+    // Validate hex length is even
+    if (hex.size() % 2 != 0) {
+        result.error = "Hex data length must be even";
+        return result;
+    }
+
+    // Validate all characters are hex
+    for (char c : hex) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            result.error = "Data must be a valid hex string";
+            return result;
+        }
+    }
+
+    // Convert hex to bytes with RequestResponseHeader prepended
+    std::vector<uint8_t> txData;
+    txData.resize(sizeof(RequestResponseHeader) + hex.length() / 2);
+
+    auto hdr = reinterpret_cast<RequestResponseHeader*>(txData.data());
+    hdr->setType(BROADCAST_TRANSACTION);
+    hdr->zeroDejavu();
+    hdr->setSize(txData.size());
+
+    // Decode hex into transaction data (after header)
+    for (size_t i = 0, count = 0; i < hex.length(); i += 2, count++) {
+        uint8_t byte = static_cast<uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16));
+        txData[sizeof(RequestResponseHeader) + count] = byte;
+    }
+
+    // Validate transaction structure
+    auto tx = reinterpret_cast<Transaction*>(txData.data() + sizeof(RequestResponseHeader));
+    size_t expectedSize = sizeof(RequestResponseHeader) + sizeof(Transaction) + tx->inputSize + SIGNATURE_SIZE;
+
+    if (txData.size() != expectedSize) {
+        result.error = "Invalid transaction size";
+        return result;
+    }
+
+    // Verify signature
+    m256i digest{};
+    const uint8_t* signature = txData.data() + sizeof(RequestResponseHeader) + sizeof(Transaction) + tx->inputSize;
+    size_t messageSize = txData.size() - sizeof(RequestResponseHeader) - SIGNATURE_SIZE;
+
+    KangarooTwelve(reinterpret_cast<const uint8_t*>(tx), messageSize, digest.m256i_u8, 32);
+
+    if (!verify(tx->sourcePublicKey, digest.m256i_u8, signature)) {
+        result.error = "Invalid signature";
+        return result;
+    }
+
+    // Enqueue for broadcast
+    MRB_SC.EnqueuePacket(txData.data());
+
+    // Calculate transaction hash (K12 of entire tx including signature)
+    KangarooTwelve(reinterpret_cast<const uint8_t*>(tx), txData.size() - sizeof(RequestResponseHeader), digest.m256i_u8, 32);
+
+    // Convert to Qubic identity format (60-char hash)
+    char hash[64] = {0};
+    getIdentityFromPublicKey(digest.m256i_u8, hash, true);
+
+    result.success = true;
+    result.txHash = std::string(hash);
+    return result;
 }
 
 } // namespace ApiHelpers
