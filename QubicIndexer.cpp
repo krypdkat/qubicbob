@@ -93,7 +93,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
 
     // now handling all log events
     bool success;
-    auto vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, tick, tick, success);
+    auto vle = db_get_logs_by_tick_range(td.epoch, tick, tick, success);
     uint32_t SC_index = 0;
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
@@ -290,6 +290,17 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
 
     while (!stopFlag.load(std::memory_order_relaxed))
     {
+        // Check for reindex signal from admin API
+        long long reindexTick = gReindexFromTick.exchange(-1, std::memory_order_acq_rel);
+        if (reindexTick >= 0)
+        {
+            Logger::get()->info("QubicIndexer: reindex signal received, resetting to tick {}", reindexTick);
+            lastIndexed = reindexTick - 1;
+            gCurrentIndexingTick = lastIndexed;
+            // Persist the new starting point
+            db_update_last_indexed_tick(static_cast<uint32_t>(lastIndexed));
+        }
+
         uint32_t nextTick = static_cast<uint32_t>(lastIndexed + 1);
         if (nextTick == gCurrentVerifyLoggingTick && gIsEndEpoch)
         {

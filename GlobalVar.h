@@ -25,6 +25,7 @@ struct GlobalState {
     std::atomic<uint32_t> gCurrentVerifyLoggingTick{0};
     std::atomic<uint32_t> gCurrentIndexingTick{0};
     std::atomic<uint32_t> gCurrentNetworkTick{0};  // Network's current tick (0 = unknown)
+    std::atomic<long long> gReindexFromTick{-1};   // Signal to indexer to restart from this tick (-1 = no reindex)
     Computors computorsList{0};
     // Fixed-size global state buffers (no heap allocations)
     uint8_t spectrum[SPECTRUM_CAPACITY * 64]; // 64 is sizeof entity

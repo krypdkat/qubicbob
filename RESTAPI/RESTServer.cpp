@@ -21,6 +21,7 @@
 #include "bob.h"
 #include "Logger.h"
 #include "shim.h"
+#include "database/db.h"
 
 // OpenAPI spec - embedded at compile time or loaded from file
 static std::string g_openApiSpec;
@@ -802,6 +803,43 @@ namespace {
                     callback(resp);
                 },
                 {Options}
+        );
+
+        // POST /_admin/reindex - Force re-indexing from a specific tick (hidden admin endpoint)
+        app().registerHandler(
+                "/_admin/reindex",
+                [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+                    try {
+                        auto jsonPtr = req->getJsonObject();
+                        if (!jsonPtr) {
+                            callback(makeError("Invalid JSON body"));
+                            return;
+                        }
+                        const auto& json = *jsonPtr;
+
+                        if (!json.isMember("fromTick") || !json["fromTick"].isUInt()) {
+                            callback(makeError("fromTick (uint32) is required"));
+                            return;
+                        }
+
+                        uint32_t fromTick = json["fromTick"].asUInt();
+
+                        // Signal the indexer to restart from the specified tick
+                        // The indexer checks gReindexFromTick on each iteration and will reset
+                        gReindexFromTick.store(static_cast<long long>(fromTick), std::memory_order_release);
+
+                        Json::Value result;
+                        result["ok"] = true;
+                        result["message"] = "Reindex signal sent to indexer";
+                        result["fromTick"] = fromTick;
+                        result["currentIndexingTick"] = gCurrentIndexingTick.load();
+                        auto resp = HttpResponse::newHttpJsonResponse(result);
+                        callback(resp);
+                    } catch (const std::exception &ex) {
+                        callback(makeError(std::string("reindex error: ") + ex.what(), k500InternalServerError));
+                    }
+                },
+                {Post}
         );
 
     }
