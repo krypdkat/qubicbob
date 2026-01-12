@@ -87,6 +87,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.run_server = root["run-server"].asBool();
     }
 
+    if (root.isMember("allow-receive-log-from-incoming-connections")) {
+        if (!root["allow-receive-log-from-incoming-connections"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-receive-log-from-incoming-connections'";
+            return false;
+        }
+        out.allow_receive_log_from_incoming_connections = root["allow-receive-log-from-incoming-connections"].asBool();
+    }
+
     if (root.isMember("is-testnet")) {
         if (!root["is-testnet"].isBool()) {
             error = "Invalid type: boolean required for key 'is-testnet'";
@@ -141,6 +149,13 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.node_seed = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     }
 
+    if (root.isMember("node-alias")) {
+        if (!root["node-alias"].isString()) {
+            error = "Invalid type: string required for key 'node-alias'";
+            return false;
+        }
+        out.nodeAlias = root["node-alias"].asString();
+    }
 
     // Parse 'tick-storage-mode' and related options
     {
@@ -296,6 +311,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("allow-check-in-qubic-global")) {
+        if (!root["allow-check-in-qubic-global"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-check-in-qubic-global'";
+            return false;
+        }
+        out.allow_check_in_qubic_global = root["allow-check-in-qubic-global"].asBool();
+    }
+
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {
         if (out.tx_storage_mode != TxStorageMode::LastNTick && out.tx_storage_mode != TxStorageMode::Free)
@@ -313,5 +336,7 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             return false;
         }
     }
+
+
     return true;
 }

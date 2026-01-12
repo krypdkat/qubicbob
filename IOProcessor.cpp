@@ -291,7 +291,7 @@ static bool isDataType(int type)
 
 
 // Receiver thread: continuously receives full packets and enqueues them into the global round buffer (MRB).
-void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopFlag)
+void connReceiver(QCPtr conn, const bool isTrustedNode, std::atomic_bool& stopFlag)
 {
     using namespace std::chrono_literals;
 
@@ -315,9 +315,12 @@ void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopF
             }
             if (!isTrustedNode)
             {
-                if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                if (!gAllowReceiveLogFromIncomingConnection) // if operator already allowed to receive, no need to block
                 {
-                    continue; //drop
+                    if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                    {
+                        continue; //drop
+                    }
                 }
             }
             // trusted conn allowed all packets

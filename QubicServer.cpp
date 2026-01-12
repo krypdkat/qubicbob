@@ -20,7 +20,7 @@
 #include "shim.h"
 
 // Forward declaration from IOProcessor.cpp
-void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopFlag);
+void connReceiver(QCPtr conn, const bool isTrustedNode, std::atomic_bool& stopFlag);
 
 namespace {
     // Simple connection limiter with global and per-IP limits
@@ -200,6 +200,16 @@ namespace {
             Logger::get()->info("QubicServer: stopped");
         }
 
+        void setConnectionPool(ConnectionPool* ptr)
+        {
+            pConnPool = ptr;
+        }
+
+        ConnectionPool* getConnectionPool()
+        {
+            return pConnPool;
+        }
+
     private:
         struct ClientCtx {
             std::atomic_bool stopFlag{false};
@@ -249,6 +259,7 @@ namespace {
             while (running_) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 cleanupFinishedClients();
+                pConnPool->removeDisconnectedClient();
             }
         }
 
@@ -301,6 +312,11 @@ namespace {
                 // Create QubicConnection (this allocates memory and spawns send thread)
                 try {
                     ctx->conn = make_qc_by_socket(cfd);
+                    if (gAllowReceiveLogFromIncomingConnection)
+                    {
+                        // add to conn pool for data querying
+                        pConnPool->add(ctx->conn);
+                    }
                 } catch (const std::exception& e) {
                     Logger::get()->error("QubicServer: Failed to create connection for {}: {}",
                                          client_ip, e.what());
@@ -324,19 +340,7 @@ namespace {
                 // Launch per-connection receiver thread
                 ctx->th = std::thread([this, ctx, isTrustedNode]() {
                     try {
-                        // Set a timeout for handshake
-                        auto handshake_deadline = std::chrono::steady_clock::now() +
-                                                  std::chrono::seconds(10);
-
                         ctx->conn->doHandshake();
-
-                        // Check if handshake took too long
-                        if (std::chrono::steady_clock::now() > handshake_deadline) {
-                            Logger::get()->warn("QubicServer: Handshake timeout for {}", ctx->client_ip);
-                            ctx->stopFlag.store(true);
-                            return;
-                        }
-
                         // Run the main receiver loop
                         connReceiver(ctx->conn, isTrustedNode, ctx->stopFlag);
 
@@ -373,11 +377,15 @@ namespace {
         std::vector<std::shared_ptr<ClientCtx>> clients_;
 
         std::unique_ptr<ConnectionLimiter> limiter_;
+
+        ConnectionPool * pConnPool{nullptr};
     };
 } // namespace
 
 // Public helpers to control the server
-bool StartQubicServer(uint16_t port = 21842) {
+bool StartQubicServer(ConnectionPool* cp, uint16_t port = 21842)
+{
+    QubicServer::instance().setConnectionPool(cp);
     return QubicServer::instance().start(port, 64, 5);  // 64 global, 5 per IP
 }
 

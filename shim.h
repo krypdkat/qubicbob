@@ -36,7 +36,8 @@
 #define nodeSubseed                 (GS().nodeSubseed)
 #define nodePublickey                 (GS().nodePublickey)
 #define nodePrivatekey                 (GS().nodePrivatekey)
-
+#define nodeIdentity (GS().nodeIdentity)
+#define gNodeAlias (GS().nodeAlias)
 #define gTickStorageMode                 (GS().gTickStorageMode)
 #define gLastNTickStorage                 (GS().gLastNTickStorage)
 
@@ -51,3 +52,7 @@
 #define gKvrocksTTL (GS().gKvrocksTTL)
 
 #define gRpcPort (GS().gRpcPort)
+#define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
+#define gExitDataThreadCounter (GS().gExitDataThreadCounter)
+#define gStartTimeUnix (GS().startTimeUnix)
+#define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)

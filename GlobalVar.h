@@ -54,9 +54,10 @@ struct GlobalState {
     m256i nodeSubseed;
     m256i nodePublickey;
     m256i nodePrivatekey;
+    std::string nodeIdentity;
 
     bool gIsEndEpoch = false;
-    bool gNotSaveTickVote = false;
+    bool gAllowReceiveLogFromIncomingConnection = false;
 
     std::map<m256i, bool> gTrustedEntities;
 
@@ -75,6 +76,13 @@ struct GlobalState {
     long long gKvrocksTTL = 1814400;
 
     unsigned gRpcPort = 40420;
+    std::atomic_int gExitDataThreadCounter;
+
+    std::string nodeAlias = "Big fat bob";
+
+    uint64_t startTimeUnix = 0;
+
+    bool allowCheckInQubicGlobal = true;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.
