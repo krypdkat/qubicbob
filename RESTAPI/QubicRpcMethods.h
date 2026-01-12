@@ -19,6 +19,9 @@ public:
     // qubic_syncing - Returns sync status
     static Json::Value syncing();
 
+    // qubic_status - Returns full node status (same as /status REST endpoint)
+    static Json::Value status();
+
     // qubic_getCurrentEpoch - Returns current epoch number
     static Json::Value getCurrentEpoch();
 
@@ -91,6 +94,21 @@ public:
 
     // qubic_getLogs - Returns logs matching filter
     static Json::Value getLogs(const Json::Value& filterParams);
+
+    // qubic_findLogIds - Returns only log IDs matching filter (same as /findLog REST endpoint)
+    // @param filterParams: JSON object with fields:
+    //   - scIndex: smart contract index (required)
+    //   - logType: log type (required)
+    //   - topic1, topic2, topic3: identity filters
+    //   - fromTick, toTick: tick range (required)
+    // Returns: array of log IDs
+    static Json::Value findLogIds(const Json::Value& filterParams);
+
+    // qubic_getLogsByIdRange - Returns logs by ID range (same as /log REST endpoint)
+    // @param epoch: epoch number
+    // @param fromId: starting log ID (inclusive)
+    // @param toId: ending log ID (inclusive)
+    static Json::Value getLogsByIdRange(uint16_t epoch, int64_t fromId, int64_t toId);
 
     // ========================================================================
     // Epoch Methods

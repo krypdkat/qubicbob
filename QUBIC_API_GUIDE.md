@@ -252,6 +252,41 @@ Returns sync status with detailed tick progress.
 
 ---
 
+#### qubic_status
+Returns full node status including version info (same as `/status` REST endpoint).
+
+**Response:**
+```json
+{
+  "result": {
+    "currentProcessingEpoch": 192,
+    "currentFetchingTick": 41000000,
+    "currentFetchingLogTick": 40999900,
+    "currentVerifyLoggingTick": 40999800,
+    "currentIndexingTick": 40999799,
+    "initialTick": 39862000,
+    "bobVersion": "1.2.3",
+    "bobVersionGitHash": "abc1234",
+    "bobCompiler": "GCC 13.2.0",
+    "extraInfo": {
+      "type": "bob",
+      "version": "1.2.3",
+      "alias": "My Bob Node",
+      "uptime": 86400,
+      "timestamp": 1704067200,
+      "operator": "BAAAA...",
+      "signature": "0x..."
+    }
+  }
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (Qubic-specific) |
+
+---
+
 #### qubic_getCurrentEpoch
 Returns current epoch info including tick range and log boundaries.
 
@@ -945,6 +980,102 @@ See the complete log types table in [qubic_getTransfers](#qubic_gettransfers) se
 | Ethereum Equivalent |
 |---------------------|
 | `eth_getLogs` |
+
+---
+
+#### qubic_findLogIds
+Returns only log IDs matching filter (same as `/findLog` REST endpoint). Useful for efficiently finding logs before fetching full details.
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | object | Filter object |
+
+**Filter object:**
+```json
+{
+  "scIndex": 0,
+  "logType": 0,
+  "topic1": "IDENTITY...",
+  "topic2": "IDENTITY...",
+  "topic3": "IDENTITY...",
+  "fromTick": 41000000,
+  "toTick": 41000100
+}
+```
+
+**Required fields:** `scIndex`, `logType`, `fromTick`, `toTick`
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_findLogIds",
+  "params": [{
+    "scIndex": 0,
+    "logType": 0,
+    "fromTick": 41000000,
+    "toTick": 41000100
+  }],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": [1234567890, 1234567891, 1234567892]
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (returns only IDs for efficiency) |
+
+---
+
+#### qubic_getLogsByIdRange
+Returns logs by ID range (same as `/log/{epoch}/{from_id}/{to_id}` REST endpoint).
+
+**Parameters:**
+| Position | Type | Description |
+|----------|------|-------------|
+| 0 | number | Epoch number |
+| 1 | number | Starting log ID (inclusive) |
+| 2 | number | Ending log ID (inclusive) |
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_getLogsByIdRange",
+  "params": [192, 1000000, 1000010],
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "result": [
+    {
+      "tick": 41000000,
+      "epoch": 192,
+      "logId": 1000000,
+      "logType": 0,
+      "source": "...",
+      "destination": "...",
+      "amount": "1000000",
+      "txId": "...",
+      "txOrderIndex": 0
+    }
+  ]
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| N/A (direct log ID access) |
 
 ---
 

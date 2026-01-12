@@ -137,6 +137,23 @@ Json::Value QubicRpcMethods::syncing() {
     return result;
 }
 
+Json::Value QubicRpcMethods::status() {
+    std::string jsonStr = bobGetStatus();
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse status";
+        return error;
+    }
+
+    return result;
+}
+
 Json::Value QubicRpcMethods::getCurrentEpoch() {
     auto info = ApiHelpers::getCurrentEpochInfo();
 
@@ -482,6 +499,90 @@ Json::Value QubicRpcMethods::getTransfers(const Json::Value& filterParams) {
 
     result["transfers"] = transfers;
     result["count"] = static_cast<Json::UInt>(transfers.size());
+
+    return result;
+}
+
+Json::Value QubicRpcMethods::findLogIds(const Json::Value& filterParams) {
+    // Validate required parameters
+    if (!filterParams.isMember("scIndex") || !filterParams["scIndex"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: scIndex";
+        return error;
+    }
+    if (!filterParams.isMember("logType") || !filterParams["logType"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: logType";
+        return error;
+    }
+    if (!filterParams.isMember("fromTick") || !filterParams["fromTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: fromTick";
+        return error;
+    }
+    if (!filterParams.isMember("toTick") || !filterParams["toTick"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: toTick";
+        return error;
+    }
+
+    uint32_t scIndex = filterParams["scIndex"].asUInt();
+    uint32_t logType = filterParams["logType"].asUInt();
+    uint32_t fromTick = filterParams["fromTick"].asUInt();
+    uint32_t toTick = filterParams["toTick"].asUInt();
+
+    if (fromTick > toTick) {
+        Json::Value error;
+        error["error"] = "fromTick must be <= toTick";
+        return error;
+    }
+
+    // Parse topic filters - use wildcard if not specified
+    const std::string wildcardIdentity = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB";
+    std::string topic1 = wildcardIdentity, topic2 = wildcardIdentity, topic3 = wildcardIdentity;
+
+    if (filterParams.isMember("topic1") && filterParams["topic1"].isString()) {
+        std::string t = normalizeIdentity(filterParams["topic1"].asString());
+        if (!t.empty() && t.size() == 60) topic1 = t;
+    }
+    if (filterParams.isMember("topic2") && filterParams["topic2"].isString()) {
+        std::string t = normalizeIdentity(filterParams["topic2"].asString());
+        if (!t.empty() && t.size() == 60) topic2 = t;
+    }
+    if (filterParams.isMember("topic3") && filterParams["topic3"].isString()) {
+        std::string t = normalizeIdentity(filterParams["topic3"].asString());
+        if (!t.empty() && t.size() == 60) topic3 = t;
+    }
+
+    std::string idsJson = bobFindLog(scIndex, logType, topic1, topic2, topic3, fromTick, toTick);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(idsJson);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse log IDs";
+        return error;
+    }
+
+    return result;
+}
+
+Json::Value QubicRpcMethods::getLogsByIdRange(uint16_t epoch, int64_t fromId, int64_t toId) {
+    std::string jsonStr = bobGetLog(epoch, fromId, toId);
+
+    Json::Value result;
+    Json::CharReaderBuilder builder;
+    std::string errors;
+    std::istringstream stream(jsonStr);
+
+    if (!Json::parseFromStream(builder, stream, &result, &errors)) {
+        Json::Value error;
+        error["error"] = "Failed to parse logs";
+        return error;
+    }
 
     return result;
 }

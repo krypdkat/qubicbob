@@ -91,6 +91,9 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
         if (method == "qubic_syncing") {
             return makeResult(id, QubicRpcMethods::syncing());
         }
+        if (method == "qubic_status") {
+            return makeResult(id, QubicRpcMethods::status());
+        }
         if (method == "qubic_getCurrentEpoch") {
             return makeResult(id, QubicRpcMethods::getCurrentEpoch());
         }
@@ -196,6 +199,22 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing filter parameter");
             }
             return makeResult(id, QubicRpcMethods::getLogs(params[0]));
+        }
+        if (method == "qubic_findLogIds") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing filter parameter");
+            }
+            return makeResult(id, QubicRpcMethods::findLogIds(params[0]));
+        }
+        if (method == "qubic_getLogsByIdRange") {
+            if (!params.isArray() || params.size() < 3) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing parameters: [epoch, fromId, toId]");
+            }
+            if (!params[0].isNumeric() || !params[1].isNumeric() || !params[2].isNumeric()) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "All parameters must be numbers");
+            }
+            return makeResult(id, QubicRpcMethods::getLogsByIdRange(
+                params[0].asUInt(), params[1].asInt64(), params[2].asInt64()));
         }
 
         // ====================================================================
