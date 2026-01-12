@@ -551,6 +551,7 @@
                     <button class="method-btn" onclick="selectMethod('qubic_chainId')">qubic_chainId</button>
                     <button class="method-btn" onclick="selectMethod('qubic_clientVersion')">qubic_clientVersion</button>
                     <button class="method-btn" onclick="selectMethod('qubic_syncing')">qubic_syncing</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_status')">qubic_status</button>
                     <button class="method-btn" onclick="selectMethod('qubic_getCurrentEpoch')">qubic_getCurrentEpoch</button>
                 </div>
 
@@ -581,8 +582,23 @@
                 </div>
 
                 <div class="method-group">
+                    <h4>Epoch</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getEpochInfo')">qubic_getEpochInfo</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getEndEpochLogs')">qubic_getEndEpochLogs</button>
+                </div>
+
+                <div class="method-group">
                     <h4>Logs</h4>
                     <button class="method-btn" onclick="selectMethod('qubic_getLogs')">qubic_getLogs</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_findLogIds')">qubic_findLogIds</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getLogsByIdRange')">qubic_getLogsByIdRange</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Transfer History</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getQuTransfers')">qubic_getQuTransfers</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAssetTransfers')">qubic_getAssetTransfers</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAllAssetTransfers')">qubic_getAllAssetTransfers</button>
                 </div>
 
                 <div class="method-group">
@@ -761,6 +777,54 @@
                 description: 'Returns logs matching the filter criteria.',
                 params: [
                     { name: 'filter', type: 'object', description: 'Filter object with: fromTick, toTick, scIndex, logType, topics', default: '{"fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_status': {
+                description: 'Returns full node status including version, uptime, epochs, ticks, and sync info.',
+                params: []
+            },
+            'qubic_getEpochInfo': {
+                description: 'Returns epoch information including tick range and log boundaries.',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' }
+                ]
+            },
+            'qubic_getEndEpochLogs': {
+                description: 'Returns end-of-epoch logs for the specified epoch.',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' }
+                ]
+            },
+            'qubic_findLogIds': {
+                description: 'Returns only log IDs matching the filter criteria (same as /findLog REST endpoint).',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: scIndex (required), logType (required), fromTick, toTick, topic1, topic2, topic3', default: '{"scIndex": 0, "logType": 0, "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getLogsByIdRange': {
+                description: 'Returns logs by ID range for a specific epoch (same as /log/{epoch}/{from}/{to}).',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' },
+                    { name: 'fromId', type: 'number', description: 'Starting log ID (inclusive)', default: '0' },
+                    { name: 'toId', type: 'number', description: 'Ending log ID (inclusive)', default: '100' }
+                ]
+            },
+            'qubic_getQuTransfers': {
+                description: 'Returns QU transfer history for an identity within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: identity (required), fromTick (required), toTick (required, max range 1000)', default: '{"identity": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getAssetTransfers': {
+                description: 'Returns asset transfer history for an identity within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: identity, issuer, assetName, fromTick, toTick (all required)', default: '{"identity": "", "issuer": "", "assetName": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getAllAssetTransfers': {
+                description: 'Returns all transfers for a specific asset within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: issuer, assetName, fromTick, toTick (all required)', default: '{"issuer": "", "assetName": "", "fromTick": 0, "toTick": 0}' }
                 ]
             },
             'qubic_subscribe': {

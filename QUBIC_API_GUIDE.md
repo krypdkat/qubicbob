@@ -1580,8 +1580,16 @@ When `skipEmptyTicks` is `true`, ticks with no matching transactions or logs are
 | N/A | `qubic_subscribe("transfers")` |
 | N/A | `qubic_subscribe("tickStream")` |
 | `eth_unsubscribe` | `qubic_unsubscribe` |
+| N/A | `qubic_status` |
 | N/A | `qubic_getCurrentEpoch` |
+| N/A | `qubic_getEpochInfo` |
+| N/A | `qubic_getEndEpochLogs` |
 | N/A | `qubic_getTransfers` |
+| N/A | `qubic_findLogIds` |
+| N/A | `qubic_getLogsByIdRange` |
+| N/A | `qubic_getQuTransfers` |
+| N/A | `qubic_getAssetTransfers` |
+| N/A | `qubic_getAllAssetTransfers` |
 | N/A | `qubic_getAssetBalance` |
 | N/A | `qubic_getAssets` (not implemented) |
 | N/A | `qubic_broadcastTransaction` (not implemented) |
