@@ -74,9 +74,10 @@ Json::Value processBatch(const Json::Value& requests) {
     return responses.empty() ? Json::Value::null : responses;
 }
 
-Json::Value dispatchMethod(const Json::Value& id,
-                           const std::string& method,
-                           const Json::Value& params) {
+// Shared method dispatcher - returns null if method not found (for subscription handling)
+Json::Value dispatchCommonMethod(const Json::Value& id,
+                                  const std::string& method,
+                                  const Json::Value& params) {
     try {
         // ====================================================================
         // Chain Info Methods
@@ -197,27 +198,37 @@ Json::Value dispatchMethod(const Json::Value& id,
             return makeResult(id, QubicRpcMethods::getLogs(params[0]));
         }
 
-        // ====================================================================
-        // Subscription Methods - Not supported over HTTP
-        // ====================================================================
-        if (method == "qubic_subscribe") {
-            return makeError(id, QubicRpcError::METHOD_NOT_FOUND,
-                           "qubic_subscribe is only available over WebSocket. Use /ws/qubic endpoint.");
-        }
-        if (method == "qubic_unsubscribe") {
-            return makeError(id, QubicRpcError::METHOD_NOT_FOUND,
-                           "qubic_unsubscribe is only available over WebSocket. Use /ws/qubic endpoint.");
-        }
-
-        // ====================================================================
-        // Method Not Found
-        // ====================================================================
-        return makeError(id, QubicRpcError::METHOD_NOT_FOUND, "Method not found: " + method);
+        // Method not found - return null so caller can handle subscription methods
+        return Json::Value::null;
 
     } catch (const std::exception& e) {
         Logger::get()->error("Error in qubic_rpc method {}: {}", method, e.what());
         return makeError(id, QubicRpcError::INTERNAL_ERROR, e.what());
     }
+}
+
+// HTTP dispatcher - handles subscription methods with "WebSocket only" error
+Json::Value dispatchMethod(const Json::Value& id,
+                           const std::string& method,
+                           const Json::Value& params) {
+    // Try common methods first
+    Json::Value result = dispatchCommonMethod(id, method, params);
+    if (!result.isNull()) {
+        return result;
+    }
+
+    // Handle subscription methods (not available over HTTP)
+    if (method == "qubic_subscribe") {
+        return makeError(id, QubicRpcError::METHOD_NOT_FOUND,
+                       "qubic_subscribe is only available over WebSocket. Use /ws/qubic endpoint.");
+    }
+    if (method == "qubic_unsubscribe") {
+        return makeError(id, QubicRpcError::METHOD_NOT_FOUND,
+                       "qubic_unsubscribe is only available over WebSocket. Use /ws/qubic endpoint.");
+    }
+
+    // Method not found
+    return makeError(id, QubicRpcError::METHOD_NOT_FOUND, "Method not found: " + method);
 }
 
 }  // namespace QubicRpcHandler

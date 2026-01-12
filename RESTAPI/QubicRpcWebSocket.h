@@ -35,10 +35,6 @@ public:
     WS_PATH_LIST_END
 
 private:
-    // JSON-RPC 2.0 message builders
-    Json::Value makeResult(const Json::Value& id, const Json::Value& result);
-    Json::Value makeError(const Json::Value& id, int code, const std::string& message);
-
     // Process a single JSON-RPC request
     Json::Value processRequest(const drogon::WebSocketConnectionPtr& conn,
                                const Json::Value& request);

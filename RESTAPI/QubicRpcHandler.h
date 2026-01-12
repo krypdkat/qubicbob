@@ -26,10 +26,17 @@ Json::Value processRequest(const Json::Value& request);
 // Process a batch of requests
 Json::Value processBatch(const Json::Value& requests);
 
-// Dispatch to method handler
+// Dispatch to method handler (HTTP version - subscription methods return error)
 Json::Value dispatchMethod(const Json::Value& id,
                            const std::string& method,
                            const Json::Value& params);
+
+// Dispatch common methods (shared between HTTP and WebSocket)
+// Returns Json::Value::null if method is not found (caller should handle subscription methods)
+// Returns valid response for all other cases (success or error)
+Json::Value dispatchCommonMethod(const Json::Value& id,
+                                  const std::string& method,
+                                  const Json::Value& params);
 
 // JSON-RPC 2.0 message builders
 Json::Value makeResult(const Json::Value& id, const Json::Value& result);
