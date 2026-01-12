@@ -19,10 +19,36 @@
 // Helper Methods
 // ============================================================================
 
+bool QubicRpcMethods::isValidIdentityFormat(const std::string& identity) {
+    // Qubic identity must be exactly 60 uppercase A-Z characters
+    if (identity.size() != 60) {
+        return false;
+    }
+    for (char c : identity) {
+        if (c < 'A' || c > 'Z') {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool QubicRpcMethods::isValidIdentityInput(const std::string& input) {
+    // Quick check for empty input
+    if (input.empty()) {
+        return false;
+    }
+    // normalizeIdentity returns empty string if invalid
+    return !normalizeIdentity(input).empty();
+}
+
 std::string QubicRpcMethods::normalizeIdentity(const std::string& input) {
     // If it starts with 0x and is 66 chars, convert from hex
     if (input.size() == 66 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')) {
-        return hexToIdentity(input);
+        std::string identity = hexToIdentity(input);
+        if (identity.empty() || !isValidIdentityFormat(identity)) {
+            return "";
+        }
+        return identity;
     }
     // If it's 64 hex chars without 0x prefix
     if (input.size() == 64) {
@@ -34,10 +60,17 @@ std::string QubicRpcMethods::normalizeIdentity(const std::string& input) {
             }
         }
         if (isHex) {
-            return hexToIdentity("0x" + input);
+            std::string identity = hexToIdentity("0x" + input);
+            if (identity.empty() || !isValidIdentityFormat(identity)) {
+                return "";
+            }
+            return identity;
         }
     }
-    // Otherwise assume it's already a Qubic identity
+    // Validate Qubic identity format (60 uppercase A-Z characters)
+    if (!isValidIdentityFormat(input)) {
+        return "";
+    }
     return input;
 }
 

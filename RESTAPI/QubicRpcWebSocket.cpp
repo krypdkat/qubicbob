@@ -123,6 +123,10 @@ Json::Value QubicRpcWebSocket::processRequest(
     }
 
     std::string method = request["method"].asString();
+    if (method.empty()) {
+        return makeError(request.get("id", Json::Value::null),
+                        QubicRpcError::INVALID_REQUEST, "Method cannot be empty");
+    }
     Json::Value params = request.get("params", Json::Value(Json::arrayValue));
     Json::Value id = request.get("id", Json::Value::null);
 
@@ -206,6 +210,10 @@ Json::Value QubicRpcWebSocket::dispatchMethod(
             if (!params.isArray() || params.size() < 1) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing identity parameter");
             }
+            if (!QubicRpcMethods::isValidIdentityInput(params[0].asString())) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS,
+                    "Invalid identity format. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
+            }
             return makeResult(id, QubicRpcMethods::getBalance(params[0].asString()));
         }
         if (method == "qubic_getTransfers") {
@@ -225,12 +233,24 @@ Json::Value QubicRpcWebSocket::dispatchMethod(
                 return makeError(id, QubicRpcError::INVALID_PARAMS,
                                "Missing parameters: [identity, issuer, assetName]");
             }
+            if (!QubicRpcMethods::isValidIdentityInput(params[0].asString())) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS,
+                    "Invalid identity format for parameter 1. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
+            }
+            if (!QubicRpcMethods::isValidIdentityInput(params[1].asString())) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS,
+                    "Invalid identity format for parameter 2 (issuer). Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
+            }
             return makeResult(id, QubicRpcMethods::getAssetBalance(
                 params[0].asString(), params[1].asString(), params[2].asString()));
         }
         if (method == "qubic_getAssets") {
             if (!params.isArray() || params.size() < 1) {
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing identity parameter");
+            }
+            if (!QubicRpcMethods::isValidIdentityInput(params[0].asString())) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS,
+                    "Invalid identity format. Expected 60-char Qubic identity (A-Z) or 0x-prefixed hex public key");
             }
             return makeResult(id, QubicRpcMethods::getAssets(params[0].asString()));
         }

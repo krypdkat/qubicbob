@@ -106,8 +106,18 @@ public:
     static bool unsubscribe(const drogon::WebSocketConnectionPtr& conn,
                              const std::string& subscriptionId);
 
+    // Validates that identity is exactly 60 uppercase A-Z characters
+    // Returns true if valid Qubic identity format (60 uppercase A-Z)
+    static bool isValidIdentityFormat(const std::string& identity);
+
+    // Validates identity input (accepts both Qubic identity and hex format)
+    // Returns true if valid and can be normalized
+    static bool isValidIdentityInput(const std::string& input);
+
 private:
+
     // Helper to normalize identity input (accepts both Qubic identity and hex)
+    // Returns empty string if validation fails
     static std::string normalizeIdentity(const std::string& input);
 
     // Helper to convert hex to Qubic identity
