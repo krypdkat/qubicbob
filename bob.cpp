@@ -283,6 +283,7 @@ int runBob(int argc, char *argv[])
     uint32_t prevVerifyEventTick = 0;
     uint32_t prevIndexingTick = 0;
     const long long sleep_time = 5;
+    int compareLocalTickWithNetworkCount = 0;
     auto start_time = std::chrono::high_resolution_clock::now();
     while (!stopFlag.load())
     {
@@ -310,6 +311,17 @@ int runBob(int argc, char *argv[])
 
         int count = 0;
         while (count++ < sleep_time*10 && !stopFlag.load()) SLEEP(100);
+        if (compareLocalTickWithNetworkCount++ >= 24)
+        {
+            compareLocalTickWithNetworkCount = 0;
+            // looks around and compare network tick once in a while
+            uint32_t network_latest_tick;
+            uint16_t network_epoch;
+            GetLatestTickFromExternalSources(network_latest_tick, network_epoch);
+            Logger::get()->info("Local Tick: ", gCurrentVerifyLoggingTick.load() -1,
+                                " | Network tick: ", network_latest_tick,
+                                " | Network epoch: ", network_epoch);
+        }
     }
     // Signal stop, disconnect sockets first to break any blocking I/O.
     for (int i = 0; i < connPool.size(); i++)

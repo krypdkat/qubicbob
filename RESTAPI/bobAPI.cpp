@@ -498,6 +498,10 @@ std::string getCustomLog(uint32_t scIndex, uint32_t logType,
     Logger::get()->info("========================================");
  * */
 
+std::string bobGetExtraStatus()
+{
+
+}
 std::string bobGetStatus()
 {
     return std::string("{") +
