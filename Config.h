@@ -44,8 +44,8 @@ struct AppConfig {
     // For "kvrocks" tx-storage-mode: how long transactions stay in RAM (in ticks)
     unsigned tx_tick_to_live = 10000;
 
-    // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1814400 seconds) (0 => no expiration)
-    long long kvrocks_ttl = 1814400;
+    // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1209600 seconds) (0 => no expiration)
+    long long kvrocks_ttl = 1209600;
 
     // RPC/REST API port (default 40420)
     unsigned rpc_port = 40420;
