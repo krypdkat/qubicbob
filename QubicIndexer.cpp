@@ -274,6 +274,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
     }
 
     Logger::get()->trace("Indexed verified tick {}", tick);
+    db_insert_u32("lastIndexedTick:"+std::to_string(gCurrentProcessingEpoch), tick);
 }
 
 void indexVerifiedTicks(std::atomic_bool& stopFlag)
