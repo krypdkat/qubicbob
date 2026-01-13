@@ -500,3 +500,5 @@ bool db_copy_transaction_to_kvrocks(const std::string &tx_hash);
 bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long long toLogId);
 bool db_delete_transaction(std::string hash);
 bool db_delete_logs(uint16_t epoch, long long start, long long end);
+
+bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr);

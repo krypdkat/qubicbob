@@ -22,14 +22,14 @@
 void IOVerifyThread(std::atomic_bool& stopFlag);
 void IORequestThread(ConnectionPool& conn_pool, std::atomic_bool& stopFlag, std::chrono::milliseconds requestCycle, uint32_t futureOffset);
 void EventRequestFromTrustedNode(ConnectionPool& connPoolWithPwd, std::atomic_bool& stopFlag, std::chrono::milliseconds request_logging_cycle_ms);
-void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopFlag);
+void connReceiver(QCPtr conn, const bool isTrustedNode, std::atomic_bool& stopFlag);
 void DataProcessorThread(std::atomic_bool& exitFlag);
 void RequestProcessorThread(std::atomic_bool& exitFlag);
 void verifyLoggingEvent(std::atomic_bool& stopFlag);
 void indexVerifiedTicks(std::atomic_bool& stopFlag);
 void querySmartContractThread(ConnectionPool& connPoolAll, std::atomic_bool& stopFlag);
 // Public helpers from QubicServer.cpp
-bool StartQubicServer(uint16_t port = 21842);
+bool StartQubicServer(ConnectionPool* cp, uint16_t port = 21842);
 void StopQubicServer();
 void garbageCleaner(std::atomic_bool& stopFlag);
 
@@ -46,6 +46,7 @@ static inline void set_this_thread_name(const char* name_in) {
 
 void requestToExitBob()
 {
+    gExitDataThreadCounter = 0;
     stopFlag = true;
 }
 
@@ -85,6 +86,7 @@ int runBob(int argc, char *argv[])
         getPublicKeyFromPrivateKey(nodePrivatekey.m256i_u8, nodePublickey.m256i_u8);
         char identity[64] = {0};
         getIdentityFromPublicKey(nodePublickey.m256i_u8, identity, false);
+        nodeIdentity = identity;
         if (cfg.node_seed == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             Logger::get()->warn("Using default bob seed: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     }
@@ -94,6 +96,14 @@ int runBob(int argc, char *argv[])
     gTxTickToLive = cfg.tx_tick_to_live;
     gSpamThreshold = cfg.spam_qu_threshold;
     gMaxThreads = cfg.max_thread;
+    gKvrocksTTL = cfg.kvrocks_ttl;
+    gRpcPort = cfg.rpc_port;
+    gEnableAdminEndpoints = cfg.enable_admin_endpoints;
+    gNodeAlias = cfg.nodeAlias;
+    using namespace std::chrono;
+    gStartTimeUnix = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    gAllowCheckInQubicGlobal = cfg.allow_check_in_qubic_global;
+    gAllowReceiveLogFromIncomingConnection = cfg.allow_receive_log_from_incoming_connections;
 
     // Defaults for new knobs are already in AppConfig
     unsigned int request_cycle_ms = cfg.request_cycle_ms;
@@ -106,18 +116,6 @@ int runBob(int argc, char *argv[])
     // Read server flags
     const bool run_server = cfg.run_server;
     unsigned int server_port_u = cfg.server_port;
-    if (run_server) {
-        if (server_port_u == 0 || server_port_u > 65535) {
-            Logger::get()->critical("Invalid server_port {}. Must be in 1..65535", server_port_u);
-            return -1;
-        }
-        const uint16_t server_port = static_cast<uint16_t>(server_port_u);
-        if (!StartQubicServer(server_port)) {
-            Logger::get()->critical("Failed to start embedded server on port {}", server_port);
-            return -1;
-        }
-        Logger::get()->info("Embedded server enabled on port {}", server_port);
-    }
 
     {
         db_connect(KEYDB_CONNECTION_STRING);
@@ -132,7 +130,6 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Loaded DB. DATA: Tick: {} | epoch: {}", gCurrentFetchingTick.load(), gCurrentProcessingEpoch.load());
         Logger::get()->info("Loaded DB. EVENT: Tick: {} | epoch: {}", gCurrentFetchingLogTick.load(), event_epoch);
     }
-
     startRESTServer();
 
 #ifdef KAFKA_ENABLED
@@ -158,12 +155,21 @@ int runBob(int argc, char *argv[])
         cfg.p2p_nodes = GetPeerFromDNS();
     }
     parseConnection(connPool, cfg.p2p_nodes);
-    if (connPool.size() == 0)
-    {
-        Logger::get()->error("0 valid connection");
-        exit(1);
+
+    while (connPool.size() > 6) connPool.randomlyRemove();
+
+    if (run_server) {
+        if (server_port_u == 0 || server_port_u > 65535) {
+            Logger::get()->critical("Invalid server_port {}. Must be in 1..65535", server_port_u);
+            return -1;
+        }
+        const uint16_t server_port = static_cast<uint16_t>(server_port_u);
+        if (!StartQubicServer(&connPool, server_port)) {
+            Logger::get()->critical("Failed to start embedded server on port {}", server_port);
+            return -1;
+        }
+        Logger::get()->info("Embedded server enabled on port {}", server_port);
     }
-    while (connPool.size() > 4) connPool.randomlyRemove();
 
 
     uint32_t initTick = 0;
@@ -251,13 +257,21 @@ int runBob(int argc, char *argv[])
     gNumBMConnection = 0;
     for (int i = 0; i < pool_size; i++)
     {
+        QCPtr qc = nullptr;
         v_recv_thread.emplace_back([&, i](){
             char nm[16];
             std::snprintf(nm, sizeof(nm), "recv-%d", i);
             set_this_thread_name(nm);
-            connReceiver(std::ref(connPool.get(i)), isTrustedNode, std::ref(stopFlag));
+            if (connPool.get(i, qc))
+            {
+                connReceiver(qc, isTrustedNode, std::ref(stopFlag));
+            }
+            else
+            {
+                Logger::get()->warn("Invalid connection index ", i);
+            }
         });
-        if (connPool.get(i)->isBM()) gNumBMConnection++;
+        if (qc && qc->isBM()) gNumBMConnection++;
     }
     for (int i = 0; i < std::max(gMaxThreads, pool_size); i++)
     {
@@ -289,6 +303,9 @@ int runBob(int argc, char *argv[])
     uint32_t prevVerifyEventTick = 0;
     uint32_t prevIndexingTick = 0;
     const long long sleep_time = 5;
+    int compareLocalTickWithNetworkCount = 0;
+    int checkInQubicGlobalCount = 0;
+    CheckInQubicGlobal();
     auto start_time = std::chrono::high_resolution_clock::now();
     while (!stopFlag.load())
     {
@@ -316,9 +333,36 @@ int runBob(int argc, char *argv[])
 
         int count = 0;
         while (count++ < sleep_time*10 && !stopFlag.load()) SLEEP(100);
+        if (compareLocalTickWithNetworkCount++ >= 24)
+        {
+            compareLocalTickWithNetworkCount = 0;
+            // looks around and compare network tick once in a while
+            uint32_t network_latest_tick;
+            uint16_t network_epoch;
+            GetLatestTickFromExternalSources(network_latest_tick, network_epoch);
+            if (network_latest_tick > 0) {
+                gLastSeenNetworkTick.store(network_latest_tick);
+            }
+            Logger::get()->info("Local Tick: {} | Network tick: {} | Network epoch: {}",
+                                gCurrentVerifyLoggingTick.load() -1,
+                                network_latest_tick,
+                                network_epoch);
+        }
+        if (checkInQubicGlobalCount++ >= 361 && gAllowCheckInQubicGlobal)
+        {
+            checkInQubicGlobalCount = 0;
+            CheckInQubicGlobal();
+        }
     }
     // Signal stop, disconnect sockets first to break any blocking I/O.
-    for (int i = 0; i < connPool.size(); i++) connPool.get(i)->disconnect();
+    for (int i = 0; i < connPool.size(); i++)
+    {
+        QCPtr qc;
+        if (connPool.get(i, qc))
+        {
+            qc->disconnect();
+        }
+    }
     // Stop and join producer/request threads first so they cannot enqueue more work.
     verify_thread.join();
     Logger::get()->info("Exited Verifying thread");
@@ -331,9 +375,16 @@ int runBob(int argc, char *argv[])
     sc_thread.join();
     if (log_event_verifier_thread.joinable())
     {
-        Logger::get()->info("Exiting verifyLoggingEvent thread");
         log_event_verifier_thread.join();
         Logger::get()->info("Exited verifyLoggingEvent thread");
+    }
+
+    if (gIsEndEpoch)
+    {
+        // exit all requesters
+        // serve slower nodes 30 more minutes before officially switching epoch
+        Logger::get()->info("Received END_EPOCH message. Serving 30 minutes and then closing BOB");
+        SLEEP(1000ULL * 60 * 30); // 30 minutes
     }
 
     // Now the receivers can drain and exit.
@@ -341,6 +392,9 @@ int runBob(int argc, char *argv[])
     Logger::get()->info("Exited recv threads");
 
     // Wake all data threads so none remain blocked on MRB.
+    int N_data_thread = v_data_thread.size();
+    Logger::get()->info("Exiting {} data thread", N_data_thread);
+    while (N_data_thread > gExitDataThreadCounter.load())
     {
         const size_t wake_count = v_data_thread.size() * 8; // ensure enough tokens
         std::vector<RequestResponseHeader> tokens(wake_count);
@@ -353,19 +407,14 @@ int runBob(int argc, char *argv[])
             MRB_Data.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
             MRB_Request.EnqueuePacket(reinterpret_cast<uint8_t*>(&tokens[i]));
         }
-
-        // Keep tokens alive until all data threads exit
-        for (auto& thr : v_data_thread) thr.join();
     }
+
+    for (auto& thr : v_data_thread) thr.join();
     Logger::get()->info("Exited data threads");
     if (cfg.tick_storage_mode != TickStorageMode::Free)
     {
         Logger::get()->info("Exiting garbage cleaner");
         garbage_thread.join();
-    }
-    if (gIsEndEpoch)
-    {
-        Logger::get()->info("Received END_EPOCH message. Closing BOB");
     }
 
     if (run_server)
@@ -375,7 +424,7 @@ int runBob(int argc, char *argv[])
     }
 
     stopRESTServer();
-    Logger::get()->info("Closed REST server at port 40420");
+    Logger::get()->info("Closed REST server at port {}", gRpcPort);
 
 #ifdef KAFKA_ENABLED
     // Shutdown Kafka producer

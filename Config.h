@@ -55,8 +55,19 @@ struct AppConfig {
     // For "kvrocks" tx-storage-mode: how long transactions stay in RAM (in ticks)
     unsigned tx_tick_to_live = 10000;
 
-    // REST API server port (default 40421)
-    unsigned rest_server_port = 40421;
+    // time to live (data expiration) for records in kvrocks engine (default 3 weeks - 1209600 seconds) (0 => no expiration)
+    long long kvrocks_ttl = 1209600;
+
+    // RPC/REST API port (default 40420)
+    unsigned rpc_port = 40420;
+    // Enable admin endpoints (default false for security)
+    bool enable_admin_endpoints = false;
+    // allow bob to receive log from incoming connections
+    bool allow_receive_log_from_incoming_connections = false;
+
+    std::string nodeAlias = "Big fat bob";
+
+    bool allow_check_in_qubic_global = true;
 
     // Kafka producer configuration (optional)
     KafkaConfig kafka;

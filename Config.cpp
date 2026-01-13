@@ -87,6 +87,14 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.run_server = root["run-server"].asBool();
     }
 
+    if (root.isMember("allow-receive-log-from-incoming-connections")) {
+        if (!root["allow-receive-log-from-incoming-connections"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-receive-log-from-incoming-connections'";
+            return false;
+        }
+        out.allow_receive_log_from_incoming_connections = root["allow-receive-log-from-incoming-connections"].asBool();
+    }
+
     if (root.isMember("is-testnet")) {
         if (!root["is-testnet"].isBool()) {
             error = "Invalid type: boolean required for key 'is-testnet'";
@@ -119,6 +127,16 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
     if (!validate_uint("request-logging-cycle-ms", out.request_logging_cycle_ms)) return false;
     if (!validate_uint("future-offset", out.future_offset)) return false;
     if (!validate_uint("server-port", out.server_port)) return false;
+    if (!validate_uint("rpc-port", out.rpc_port)) return false;
+
+    // Enable admin endpoints (default false)
+    if (root.isMember("enable-admin-endpoints")) {
+        if (!root["enable-admin-endpoints"].isBool()) {
+            error = "Invalid type: boolean required for key 'enable-admin-endpoints'";
+            return false;
+        }
+        out.enable_admin_endpoints = root["enable-admin-endpoints"].asBool();
+    }
 
     // Maximum threads the system can use (0 means auto/unlimited)
     if (!validate_uint("max-thread", out.max_thread)) return false;
@@ -140,6 +158,13 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         out.node_seed = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     }
 
+    if (root.isMember("node-alias")) {
+        if (!root["node-alias"].isString()) {
+            error = "Invalid type: string required for key 'node-alias'";
+            return false;
+        }
+        out.nodeAlias = root["node-alias"].asString();
+    }
 
     // Parse 'tick-storage-mode' and related options
     {
@@ -282,6 +307,26 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
         }
     }
 
+    if (root.isMember("kvrocks_ttl")) {
+        const auto& v = root["kvrocks_ttl"];
+        if (v.isNumeric())
+        {
+            out.kvrocks_ttl = v.asInt64();
+        }
+        else
+        {
+            error = "Invalid type: unsigned integer required for key 'kvrocks_ttl'";
+            return false;
+        }
+    }
+
+    if (root.isMember("allow-check-in-qubic-global")) {
+        if (!root["allow-check-in-qubic-global"].isBool()) {
+            error = "Invalid type: boolean required for key 'allow-check-in-qubic-global'";
+            return false;
+        }
+        out.allow_check_in_qubic_global = root["allow-check-in-qubic-global"].asBool();
+    }
 
     if (out.tick_storage_mode == TickStorageMode::LastNTick)
     {

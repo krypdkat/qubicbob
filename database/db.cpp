@@ -9,7 +9,7 @@
 #include "Logger.h"
 #include "K12AndKeyUtil.h"
 #include <cstdlib> // std::exit
-
+#include "shim.h"
 // Global Redis client handle
 static std::unique_ptr<sw::redis::Redis> g_redis = nullptr;
 static std::unique_ptr<sw::redis::Redis> g_kvrocks = nullptr;
@@ -1186,7 +1186,8 @@ bool db_copy_transaction_to_kvrocks(const std::string &tx_hash) {
 
         // Write to Kvrocks
         sw::redis::StringView view(val->data(), val->size());
-        g_kvrocks->set(key, view);
+
+        g_kvrocks->set(key, view, std::chrono::seconds(gKvrocksTTL));
 
         return true;
     } catch (const sw::redis::Error &e) {
@@ -1281,6 +1282,9 @@ bool db_move_log_to_kvrocks(uint16_t epoch, uint64_t logId) {
     try {
         const std::string key = "log:" + std::to_string(epoch) + ":" + std::to_string(logId);
 
+        // Check if already in Kvrocks - if so, nothing to do
+        if (g_kvrocks->exists(key)) return true;
+
         if (!g_redis->exists(key)) return false;
         // Read log data from KeyDB
         auto val = g_redis->get(key);
@@ -1290,7 +1294,7 @@ bool db_move_log_to_kvrocks(uint16_t epoch, uint64_t logId) {
 
         // Write to Kvrocks
         sw::redis::StringView view(val->data(), val->size());
-        g_kvrocks->set(key, view);
+        g_kvrocks->set(key, view, std::chrono::seconds(gKvrocksTTL));
 
         return true;
     } catch (const sw::redis::Error &e) {
@@ -1313,6 +1317,39 @@ bool db_move_logs_to_kvrocks_by_range(uint16_t epoch, long long fromLogId, long 
         return success;
     } catch (const std::exception &e) {
         Logger::get()->error("Error in db_migrate_logs_by_range: {}\n", e.what());
+        return false;
+    }
+}
+
+bool db_get_endepoch_log_range_info(const uint16_t epoch, long long &start, long long &length, LogRangesPerTxInTick &lr) {
+    if (!g_redis) return false;
+    try {
+        // Get start and length from end_epoch:tick_log_range:<epoch>
+        const std::string key_range = "end_epoch:tick_log_range:" + std::to_string(epoch);
+        std::vector<sw::redis::Optional<std::string>> vals;
+        g_redis->hmget(key_range, {"fromLogId", "length"}, std::back_inserter(vals));
+
+        if (vals.size() != 2 || !vals[0] || !vals[1]) {
+            return false;
+        }
+
+        start = std::stoll(*vals[0]);
+        length = std::stoll(*vals[1]);
+
+        // Get log ranges from end_epoch:log_ranges:<epoch>
+        const std::string key_lr = "end_epoch:log_ranges:" + std::to_string(epoch);
+        auto val = g_redis->get(key_lr);
+        if (!val || val->size() != sizeof(LogRangesPerTxInTick)) {
+            return false;
+        }
+        memcpy(&lr, val->data(), sizeof(LogRangesPerTxInTick));
+
+        return true;
+    } catch (const sw::redis::Error &e) {
+        Logger::get()->error("Redis error in db_get_endepoch_log_range_info: {}\n", e.what());
+        return false;
+    } catch (const std::exception &e) {
+        Logger::get()->error("Error in db_get_endepoch_log_range_info: {}\n", e.what());
         return false;
     }
 }
@@ -1347,7 +1384,7 @@ bool db_insert_vtick_to_kvrocks(uint32_t tick, const FullTickStruct& fullTick)
 
         const std::string key = "vtick:" + std::to_string(tick);
         sw::redis::StringView val(compressed.data(), compressed.size());
-        g_kvrocks->set(key, val);
+        g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("KVROCKS error in db_insert_vtick: %s\n", e.what());
@@ -1402,6 +1439,7 @@ bool db_insert_TickLogRange_to_kvrocks(uint32_t tick, long long& logStart, long 
         fields["fromLogId"] = std::to_string(logStart);
         fields["length"] = std::to_string(logLen);
         g_kvrocks->hmset(key_summary, fields.begin(), fields.end());
+        g_kvrocks->expire(key_summary, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("KVROCKS error in db_insert_TickLogRange_to_kvrocks: %s\n", e.what());
@@ -1439,7 +1477,7 @@ bool db_insert_cLogRange_to_kvrocks(uint32_t tick, const LogRangesPerTxInTick& l
 
         const std::string key = "cLogRange:" + std::to_string(tick);
         sw::redis::StringView val(compressed.data(), compressed.size());
-        g_kvrocks->set(key, val);
+        g_kvrocks->set(key, val, std::chrono::seconds(gKvrocksTTL));
         return true;
     } catch (const sw::redis::Error& e) {
         Logger::get()->error("KVROCKS error in db_insert_cLogRange_to_kvrocks: %s\n", e.what());

@@ -98,12 +98,8 @@ QubicConnection::QubicConnection(const char* nodeIp, int nodePort)
 }
 QubicConnection::~QubicConnection()
 {
+    disconnect();
     shouldStop = true;
-    // Proactively interrupt any blocking send() to let the thread exit promptly
-    if (mSocket >= 0) {
-        shutdown(mSocket, SHUT_RDWR);
-        close(mSocket);
-    }
     if (sendThreadHDL.joinable()) {
         sendThreadHDL.join();
     }
@@ -465,9 +461,11 @@ void parseConnection(ConnectionPool& connPoolAll,
 
 void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t& maxInitTick, uint16_t& maxInitEpoch)
 {
+    const auto errorBackoff = 1000;
     for (int i = 0; i < cp.size(); i++)
     {
-        auto& conn = cp.get(i);
+        QCPtr conn = nullptr;
+        if (!cp.get(i, conn)) continue;
         try {
             if (conn->isSocketValid())
             {
@@ -480,11 +478,13 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
             }
             else
             {
+                SLEEP(errorBackoff);
                 conn->reconnect();
             }
         }
         catch (...)
         {
+            SLEEP(errorBackoff);
             conn->reconnect();
         }
     }
@@ -492,8 +492,10 @@ void doHandshakeAndGetBootstrapInfo(ConnectionPool& cp, bool isTrusted, uint32_t
 
 void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
 {
+    const auto errorBackoff = 1000;
     for (int i = 0; i < cp.size(); i++) {
-        auto &conn = cp.get(i);
+        QCPtr conn = nullptr;
+        if (!cp.get(i, conn)) continue;
         try {
             if (computorsList.epoch != gCurrentProcessingEpoch.load())
             {
@@ -520,6 +522,7 @@ void getComputorList(ConnectionPool& cp, std::string arbitratorIdentity)
         }
         catch (...)
         {
+            SLEEP(errorBackoff);
             conn->reconnect();
         }
     }

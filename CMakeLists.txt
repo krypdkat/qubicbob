@@ -141,6 +141,7 @@ endif ()
 # --- Project Sources ---
 SET(FILES
 		${CMAKE_SOURCE_DIR}/connection/connection.cpp
+		${CMAKE_SOURCE_DIR}/connection/connectionPool.cpp
 		${CMAKE_SOURCE_DIR}/connection/NodeIntroducer.cpp
         ${CMAKE_SOURCE_DIR}/database/db.cpp
 		${CMAKE_SOURCE_DIR}/database/garbageCleaner.cpp
@@ -155,10 +156,16 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
 		${CMAKE_SOURCE_DIR}/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/RESTServer.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/LogSubscriptionManager.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/LogWebSocket.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMapper.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcWebSocket.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMethods.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicSubscriptionManager.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcHandler.cpp
 )
 
 # Add Kafka source if librdkafka is available

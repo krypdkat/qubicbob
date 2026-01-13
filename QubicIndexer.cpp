@@ -12,6 +12,7 @@
 #include "KafkaProducer.h"
 #include <json/json.h>
 #endif
+#include "RESTAPI/QubicSubscriptionManager.h"
 static bool matchesTransaction(const QuTransfer &transfer, const Transaction &tx) {
     return transfer.sourcePublicKey == tx.sourcePublicKey &&
             transfer.destinationPublicKey == tx.destinationPublicKey &&
@@ -159,7 +160,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
 
     // now handling all log events
     bool success;
-    auto vle = db_get_logs_by_tick_range(gCurrentProcessingEpoch, tick, tick, success);
+    auto vle = db_get_logs_by_tick_range(td.epoch, tick, tick, success);
     uint32_t SC_index = 0;
     uint32_t logType = 0;
     m256i topic1, topic2, topic3;
@@ -348,6 +349,7 @@ static void indexTick(uint32_t tick, const TickData &td) {
 #endif
 
     Logger::get()->trace("Indexed verified tick {}", tick);
+    db_insert_u32("lastIndexedTick:"+std::to_string(gCurrentProcessingEpoch), tick);
 }
 
 void indexVerifiedTicks(std::atomic_bool& stopFlag)
@@ -363,6 +365,17 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
 
     while (!stopFlag.load(std::memory_order_relaxed))
     {
+        // Check for reindex signal from admin API
+        long long reindexTick = gReindexFromTick.exchange(-1, std::memory_order_acq_rel);
+        if (reindexTick >= 0)
+        {
+            Logger::get()->info("QubicIndexer: reindex signal received, resetting to tick {}", reindexTick);
+            lastIndexed = reindexTick - 1;
+            gCurrentIndexingTick = lastIndexed;
+            // Persist the new starting point
+            db_update_last_indexed_tick(static_cast<uint32_t>(lastIndexed));
+        }
+
         uint32_t nextTick = static_cast<uint32_t>(lastIndexed + 1);
         if (nextTick == gCurrentVerifyLoggingTick && gIsEndEpoch)
         {
@@ -393,6 +406,22 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
 
         lastIndexed = nextTick;
         gCurrentIndexingTick = lastIndexed;
+
+        // Notify tickStream subscribers after indexing is complete
+        // (all transaction execution info is now available)
+        // This is wrapped in try-catch to ensure indexer continues even if notification fails
+        if (QubicSubscriptionManager::instance().getClientCount() > 0) {
+            try {
+                // Get logs for this tick
+                bool success = false;
+                std::vector<LogEvent> logs = db_get_logs_by_tick_range(td.epoch, nextTick, nextTick, success);
+                QubicSubscriptionManager::instance().onVerifiedTick(nextTick, td.epoch, logs, td);
+            } catch (const std::exception& e) {
+                Logger::get()->warn("QubicIndexer: tickStream notification failed for tick {}: {}", nextTick, e.what());
+            } catch (...) {
+                Logger::get()->warn("QubicIndexer: tickStream notification failed for tick {}: unknown error", nextTick);
+            }
+        }
     }
 
     Logger::get()->info("QubicIndexer: stopping gracefully at last_indexed_tick={}", lastIndexed);

@@ -291,11 +291,11 @@ static bool isDataType(int type)
 
 
 // Receiver thread: continuously receives full packets and enqueues them into the global round buffer (MRB).
-void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopFlag)
+void connReceiver(QCPtr conn, const bool isTrustedNode, std::atomic_bool& stopFlag)
 {
     using namespace std::chrono_literals;
 
-    const auto errorBackoff = 500ms;
+    const auto errorBackoff = 1000ms;
 
     std::vector<uint8_t> packet;
     packet.reserve(64 * 1024); // Optional: initial capacity to minimize reallocations
@@ -309,14 +309,18 @@ void connReceiver(QCPtr& conn, const bool isTrustedNode, std::atomic_bool& stopF
                 if (!conn->isReconnectable()) return;
                 Logger::get()->trace("connReceiver error on : {}. Disconnecting", conn->getNodeIp());
                 conn->disconnect();
+                SLEEP(errorBackoff);
                 conn->reconnect();
                 continue;
             }
             if (!isTrustedNode)
             {
-                if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                if (!gAllowReceiveLogFromIncomingConnection) // if operator already allowed to receive, no need to block
                 {
-                    continue; //drop
+                    if (!checkAllowedTypeForNonTrusted(hdr.type()))
+                    {
+                        continue; //drop
+                    }
                 }
             }
             // trusted conn allowed all packets

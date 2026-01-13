@@ -24,6 +24,8 @@ struct GlobalState {
     std::atomic<uint32_t> gCurrentLoggingEventTick{0};
     std::atomic<uint32_t> gCurrentVerifyLoggingTick{0};
     std::atomic<uint32_t> gCurrentIndexingTick{0};
+    std::atomic<uint32_t> gLastSeenNetworkTick{0};  // Network's current tick (0 = unknown)
+    std::atomic<long long> gReindexFromTick{-1};   // Signal to indexer to restart from this tick (-1 = no reindex)
     Computors computorsList{0};
     // Fixed-size global state buffers (no heap allocations)
     uint8_t spectrum[SPECTRUM_CAPACITY * 64]; // 64 is sizeof entity
@@ -52,9 +54,10 @@ struct GlobalState {
     m256i nodeSubseed;
     m256i nodePublickey;
     m256i nodePrivatekey;
+    std::string nodeIdentity;
 
     bool gIsEndEpoch = false;
-    bool gNotSaveTickVote = false;
+    bool gAllowReceiveLogFromIncomingConnection = false;
 
     std::map<m256i, bool> gTrustedEntities;
 
@@ -69,6 +72,18 @@ struct GlobalState {
     uint32_t gTxTickToLive = 10000;
 
     int gNumBMConnection = 0;
+
+    long long gKvrocksTTL = 1814400;
+
+    unsigned gRpcPort = 40420;
+    bool gEnableAdminEndpoints = false;  // Admin endpoints disabled by default
+    std::atomic_int gExitDataThreadCounter;
+
+    std::string nodeAlias = "Big fat bob";
+
+    uint64_t startTimeUnix = 0;
+
+    bool allowCheckInQubicGlobal = true;
 };
 
 // Safe, lazy singleton accessor avoids static init order issues.

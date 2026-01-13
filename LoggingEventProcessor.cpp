@@ -20,6 +20,7 @@
 #include "shim.h"
 #include <future>
 #include "RESTAPI/LogSubscriptionManager.h"
+#include "RESTAPI/QubicSubscriptionManager.h"
 
 using namespace std::chrono_literals;
 extern "C" {
@@ -771,22 +772,42 @@ verifyNodeStateDigest:
                 saveState(lastVerifiedTick, processToTick);
             }
 
-            // Push verified logs to WebSocket subscribers
-            if (!vle.empty()) {
-                // Group logs by tick for proper ordering
-                uint32_t currentTick = 0;
-                std::vector<LogEvent> tickLogs;
-                for (const auto& log : vle) {
-                    uint32_t logTick = log.getTick();
-                    if (logTick != currentTick && !tickLogs.empty()) {
-                        LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
-                        tickLogs.clear();
+            // Push verified logs to WebSocket subscribers (for logs/transfers subscriptions)
+            // Note: tickStream subscriptions are notified from QubicIndexer after indexing
+            // Wrapped in try-catch to ensure log verification continues even if notification fails
+            bool hasLogSubClients = LogSubscriptionManager::instance().getClientCount() > 0;
+            bool hasQubicSubClients = QubicSubscriptionManager::instance().getClientCount() > 0;
+
+            if (hasLogSubClients || hasQubicSubClients) {
+                try {
+                    if (!vle.empty()) {
+                        // Group logs by tick for proper ordering
+                        uint32_t currentTick = 0;
+                        std::vector<LogEvent> tickLogs;
+                        for (const auto& log : vle) {
+                            uint32_t logTick = log.getTick();
+                            if (logTick != currentTick && !tickLogs.empty()) {
+                                LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                                tickLogs.clear();
+                            }
+                            currentTick = logTick;
+                            tickLogs.push_back(log);
+                        }
+                        if (!tickLogs.empty()) {
+                            LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                        }
+                    } else if (hasQubicSubClients) {
+                        // No logs but we still need to notify newTicks subscribers
+                        // Call with empty logs for processToTick
+                        TickData td{0};
+                        if (db_try_get_tick_data(processToTick, td)) {
+                            QubicSubscriptionManager::instance().onNewTick(processToTick, td);
+                        }
                     }
-                    currentTick = logTick;
-                    tickLogs.push_back(log);
-                }
-                if (!tickLogs.empty()) {
-                    LogSubscriptionManager::instance().pushVerifiedLogs(currentTick, gCurrentProcessingEpoch, tickLogs);
+                } catch (const std::exception& e) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: {}", e.what());
+                } catch (...) {
+                    Logger::get()->warn("LoggingEventProcessor: WebSocket notification failed: unknown error");
                 }
             }
 
@@ -827,19 +848,6 @@ verifyNodeStateDigest:
 
         // the endTick tick is a virtual tick, we need to migrate its data to new keys:
         uint32_t endTick = lastQuorumTick + 1; // the system just "borrow" this tick index
-        db_rename("log_range_sig:" + std::to_string(endTick),
-                      "end_epoch:" + std::to_string(gCurrentProcessingEpoch) + ":log_range_sig");
-
-        // For log signatures we need to iterate through all chunks
-        int chunkId = 0;
-        std::string oldKey = "log_sig:" + std::to_string(endTick) + ":" + std::to_string(chunkId);
-        while (db_key_exists(oldKey)) {
-            db_rename(oldKey,
-                          "end_epoch:" + std::to_string(gCurrentProcessingEpoch) + ":log_sig:" +
-                          std::to_string(chunkId));
-            chunkId++;
-            oldKey = "log_sig:" + std::to_string(endTick) + ":" + std::to_string(chunkId);
-        }
 
         db_rename("tick_log_range:" + std::to_string(endTick),
                       "end_epoch:tick_log_range:"+std::to_string(gCurrentProcessingEpoch));

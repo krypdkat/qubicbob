@@ -15,6 +15,8 @@
 #define gCurrentFetchingLogTick   (GS().gCurrentLoggingEventTick)
 #define gCurrentVerifyLoggingTick  (GS().gCurrentVerifyLoggingTick)
 #define gCurrentIndexingTick       (GS().gCurrentIndexingTick)
+#define gLastSeenNetworkTick        (GS().gLastSeenNetworkTick)
+#define gReindexFromTick           (GS().gReindexFromTick)
 #define computorsList              (GS().computorsList)
 
 #define spectrum                   ((EntityRecord*)GS().spectrum)
@@ -34,7 +36,8 @@
 #define nodeSubseed                 (GS().nodeSubseed)
 #define nodePublickey                 (GS().nodePublickey)
 #define nodePrivatekey                 (GS().nodePrivatekey)
-
+#define nodeIdentity (GS().nodeIdentity)
+#define gNodeAlias (GS().nodeAlias)
 #define gTickStorageMode                 (GS().gTickStorageMode)
 #define gLastNTickStorage                 (GS().gLastNTickStorage)
 
@@ -45,3 +48,12 @@
 #define gSpamThreshold (GS().gSpamThreshold)
 
 #define gNumBMConnection (GS().gNumBMConnection)
+
+#define gKvrocksTTL (GS().gKvrocksTTL)
+
+#define gRpcPort (GS().gRpcPort)
+#define gEnableAdminEndpoints (GS().gEnableAdminEndpoints)
+#define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
+#define gExitDataThreadCounter (GS().gExitDataThreadCounter)
+#define gStartTimeUnix (GS().startTimeUnix)
+#define gAllowCheckInQubicGlobal (GS().allowCheckInQubicGlobal)

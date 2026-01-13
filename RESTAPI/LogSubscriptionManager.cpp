@@ -1,4 +1,5 @@
 #include "LogSubscriptionManager.h"
+#include "QubicSubscriptionManager.h"
 #include "database/db.h"
 #include "Logger.h"
 #include "shim.h"
@@ -193,6 +194,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         Logger::get()->warn("LogSubscriptionManager: Trying to get deleted tick data");
     }
+    else
+    {
+        // Notify Qubic subscription manager of new tick (for newTicks subscriptions)
+        QubicSubscriptionManager::instance().onNewTick(tick, td);
+    }
 
     if (!db_try_get_log_ranges(tick, lr))
     {
@@ -207,6 +213,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
         auto log0Id = logs[0].getLogId();
         // scan to find the first cursor
         logTxOrderIndex = lr.scanTxId(logTxOrder, 0, log0Id);
+        if (logTxOrderIndex == -1)
+        {
+            Logger::get()->warn("[4] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+            return;
+        }
     }
 
     // Calculate timestamp from tick data
@@ -263,9 +274,9 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         std::shared_lock lock(mutex_);
 
-        if (clients_.empty() || subscriptionIndex_.empty()) return;
-
-        for (const auto& log : logs) {
+        // Only process for LogSubscriptionManager clients if there are any
+        if (!clients_.empty() && !subscriptionIndex_.empty()) {
+            for (const auto& log : logs) {
             SubscriptionKey key;
             if (!extractSubscriptionKey(log, key)) continue;
             auto logId = log.getLogId();
@@ -279,6 +290,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
             if (logId > e)
             {
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, logId);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[5] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
 
@@ -340,7 +356,8 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
                 }
                 pendingSends.emplace_back(conn, jsonStr);
             }
-        }
+            }
+        }  // end if (!clients_.empty() && !subscriptionIndex_.empty())
     }
 
     // Dispatch sends asynchronously via Drogon's event loop
@@ -360,6 +377,14 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
             });
         }
     }
+
+    // Notify Qubic subscription manager of new logs (for logs subscriptions)
+    if (!logs.empty() && td.tick != 0) {
+        QubicSubscriptionManager::instance().onNewLogs(tick, logs, td);
+    }
+
+    // Note: tickStream subscriptions are notified from QubicIndexer after indexing
+    // completes, so that transaction execution info (executed, logIdFrom) is available
 }
 
 void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr& conn, uint32_t toTick) {
@@ -458,6 +483,11 @@ void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr
                 {
                     logTxOrder = lr.sort();
                     logTxOrderIndex = lr.scanTxId(logTxOrder, 0, id);// scan to find the first cursor
+                    if (logTxOrderIndex == -1)
+                    {
+                        Logger::get()->warn("[0] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                        return;
+                    }
                 }
             }
 
@@ -468,6 +498,11 @@ void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr
             {
                 // rescan to find next cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[1] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
 
@@ -616,6 +651,11 @@ void LogSubscriptionManager::performCatchUpByLogId(const drogon::WebSocketConnec
                 logTxOrder = lr.sort();
                 // scan to find the first cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, 0, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[2] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
             }
             int txIndex = logTxOrder[logTxOrderIndex];
             auto s = lr.fromLogId[txIndex];
@@ -624,6 +664,11 @@ void LogSubscriptionManager::performCatchUpByLogId(const drogon::WebSocketConnec
             {
                 // rescan to find the next cursor
                 logTxOrderIndex = lr.scanTxId(logTxOrder, logTxOrderIndex + 1, id);
+                if (logTxOrderIndex == -1)
+                {
+                    Logger::get()->warn("[3] Unexpected calculation, logTxOrderIndex is -1. Exit function...");
+                    return;
+                }
                 txIndex = logTxOrder[logTxOrderIndex];
             }
             // Parse log to JSON using same format as REST API
