@@ -3,6 +3,7 @@
 #include "shim.h"
 #include "database/db.h"
 #include "GlobalVar.h"
+#include "defines.h"
 #include <sstream>
 #include <iomanip>
 #include <cstring>
@@ -180,8 +181,16 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     Json::Value result(Json::objectValue);
 
     result["tickNumber"] = tick;
-    result["epoch"] = td.epoch;
-    result["computorIndex"] = td.computorIndex;
+    // If tick data epoch is 0 (empty/missing tick data), use current epoch
+    // but only if the tick is within the current epoch's range
+    uint16_t epoch = td.epoch;
+    if (epoch == 0 && tick >= gInitialTick.load()) {
+        epoch = gCurrentProcessingEpoch.load();
+    }
+    result["epoch"] = epoch;
+    // computorIndex can always be calculated from tick number
+    uint16_t computorIndex = (td.computorIndex > 0) ? td.computorIndex : (tick % NUMBER_OF_COMPUTORS);
+    result["computorIndex"] = computorIndex;
 
     // Signature as hash
     result["signature"] = bytesToHex(td.signature, SIGNATURE_SIZE);
