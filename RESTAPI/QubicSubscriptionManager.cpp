@@ -2,8 +2,10 @@
 #include "QubicRpcMapper.h"
 #include "Logger.h"
 #include "GlobalVar.h"
+#include "shim.h"
 #include "K12AndKeyUtil.h"
 #include "database/db.h"
+#include "defines.h"
 #include "drogon/drogon.h"
 #include <sstream>
 #include <iomanip>
@@ -442,6 +444,20 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
     size_t totalLogs,
     bool includeInputData) const
 {
+    // Determine if we have tick data (epoch == 0 means no tick data in database)
+    bool hasNoTickData = (td.epoch == 0);
+    // A tick is skipped if we have no tick data OR no transactions (226+ computors voted empty)
+    bool isSkipped = hasNoTickData || (totalTxs == 0);
+
+    // Apply epoch fallback: if tick data epoch is 0 but tick is in current epoch range, use current epoch
+    uint16_t effectiveEpoch = epoch;
+    if (effectiveEpoch == 0 && tick >= gInitialTick.load()) {
+        effectiveEpoch = gCurrentProcessingEpoch.load();
+    }
+
+    // computorIndex can always be calculated from tick number
+    uint16_t computorIndex = (td.computorIndex > 0) ? td.computorIndex : (tick % NUMBER_OF_COMPUTORS);
+
     // Format timestamp from TickData fields
     std::tm timeinfo = {};
     timeinfo.tm_year = static_cast<int>(td.year) + 2000 - 1900;
@@ -486,8 +502,7 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
         logArray.append(logJson);
     }
 
-    // Build JSON string with controlled order:
-    // epoch, tick, isCatchUp, timestamp, totalLogs, filteredLogs, totalTxs, filteredTxs, transactions, logs
+    // Build JSON string with controlled order
     Json::FastWriter writer;
     std::string txArrayStr = writer.write(txArray);
     std::string logArrayStr = writer.write(logArray);
@@ -496,8 +511,11 @@ std::string QubicSubscriptionManager::buildTickStreamJsonString(
     if (!logArrayStr.empty() && logArrayStr.back() == '\n') logArrayStr.pop_back();
 
     std::stringstream ss;
-    ss << "{\"epoch\":" << epoch
+    ss << "{\"epoch\":" << effectiveEpoch
        << ",\"tick\":" << tick
+       << ",\"computorIndex\":" << computorIndex
+       << ",\"hasNoTickData\":" << (hasNoTickData ? "true" : "false")
+       << ",\"isSkipped\":" << (isSkipped ? "true" : "false")
        << ",\"isCatchUp\":" << (isCatchUp ? "true" : "false")
        << ",\"timestamp\":\"" << timeBuf << "\""
        << ",\"totalLogs\":" << totalLogs

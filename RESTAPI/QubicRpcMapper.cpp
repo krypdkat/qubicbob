@@ -181,6 +181,15 @@ Json::Value tickDataToQubicTick(uint32_t tick, const TickData& td,
     Json::Value result(Json::objectValue);
 
     result["tickNumber"] = tick;
+
+    // Determine if we have tick data (epoch == 0 means no tick data in database)
+    bool hasNoTickData = (td.epoch == 0);
+    // A tick is skipped if we have no tick data OR 226+ computors voted with zero txDigest (empty tick)
+    bool isSkipped = hasNoTickData || txDigests.empty();
+
+    result["hasNoTickData"] = hasNoTickData;
+    result["isSkipped"] = isSkipped;
+
     // If tick data epoch is 0 (empty/missing tick data), use current epoch
     // but only if the tick is within the current epoch's range
     uint16_t epoch = td.epoch;
