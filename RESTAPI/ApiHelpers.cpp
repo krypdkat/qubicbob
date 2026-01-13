@@ -182,6 +182,10 @@ EpochInfo getEpochInfo(uint16_t epoch) {
     info.endTickStartLogId = start;
     info.endTickEndLogId = start + length - 1;
 
+    uint32_t lastIndexedTick = 0;
+    db_get_u32("lastIndexedTick:"+std::to_string(epoch), lastIndexedTick);
+    info.lastIndexedTick = lastIndexedTick;
+
     info.found = true;
     return info;
 }
