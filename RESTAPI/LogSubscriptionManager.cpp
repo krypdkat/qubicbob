@@ -26,7 +26,7 @@ void LogSubscriptionManager::addClient(const drogon::WebSocketConnectionPtr& con
 
     clients_[conn] = std::move(state);
 
-    Logger::get()->info("WebSocket client connected. Total clients: {}", clients_.size());
+    Logger::get()->debug("WebSocket client connected. Total clients: {}", clients_.size());
 }
 
 void LogSubscriptionManager::removeClient(const drogon::WebSocketConnectionPtr& conn) {
@@ -48,7 +48,7 @@ void LogSubscriptionManager::removeClient(const drogon::WebSocketConnectionPtr& 
 
     clients_.erase(it);
 
-    Logger::get()->info("WebSocket client disconnected. Total clients: {}", clients_.size());
+    Logger::get()->debug("WebSocket client disconnected. Total clients: {}", clients_.size());
 }
 
 void LogSubscriptionManager::setClientLastTick(const drogon::WebSocketConnectionPtr& conn, uint32_t lastTick) {

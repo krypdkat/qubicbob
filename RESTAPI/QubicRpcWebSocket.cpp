@@ -13,7 +13,7 @@ void QubicRpcWebSocket::handleNewConnection(
 {
     // Reject connections until bootstrap is complete
     if (gCurrentVerifyLoggingTick.load() <= gInitialTick.load()) {
-        Logger::get()->info("Qubic JSON-RPC WebSocket connection rejected (bootstrap in progress) from {}",
+        Logger::get()->debug("Qubic JSON-RPC WebSocket connection rejected (bootstrap in progress) from {}",
                             req->getPeerAddr().toIpPort());
         Json::Value error;
         error["jsonrpc"] = "2.0";
@@ -26,7 +26,7 @@ void QubicRpcWebSocket::handleNewConnection(
         return;
     }
 
-    Logger::get()->info("Qubic JSON-RPC WebSocket connection from {}",
+    Logger::get()->debug("Qubic JSON-RPC WebSocket connection from {}",
                         req->getPeerAddr().toIpPort());
 
     // Register with subscription manager
@@ -36,7 +36,7 @@ void QubicRpcWebSocket::handleNewConnection(
 void QubicRpcWebSocket::handleConnectionClosed(
     const drogon::WebSocketConnectionPtr& wsConnPtr)
 {
-    Logger::get()->info("Qubic JSON-RPC WebSocket connection closed");
+    Logger::get()->debug("Qubic JSON-RPC WebSocket connection closed");
 
     // Cleanup subscriptions
     QubicSubscriptionManager::instance().removeClient(wsConnPtr);
