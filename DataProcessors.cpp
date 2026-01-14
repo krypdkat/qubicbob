@@ -201,7 +201,11 @@ void DataProcessorThread(std::atomic_bool& exitFlag)
     while (!exitFlag.load())
     {
         uint32_t packet_size = 0;
-        MRB_Data.GetPacket(buf.data(), packet_size);
+        if (!MRB_Data.TryGetPacket(buf.data(), packet_size))
+        {
+            SLEEP(10);
+            continue;
+        }
         if (packet_size == 0 || packet_size >= RequestResponseHeader::max_size)
         {
             Logger::get()->warn("Malformed packet_size: {}", packet_size);
@@ -469,7 +473,11 @@ void RequestProcessorThread(std::atomic_bool& exitFlag)
     while (!exitFlag.load())
     {
         uint32_t packet_size = 0;
-        MRB_Request.GetPacket(ptr, packet_size);
+        if (MRB_Request.TryGetPacket(buf.data(), packet_size))
+        {
+            SLEEP(10);
+            continue;
+        }
         if (packet_size == 0 || packet_size >= RequestResponseHeader::max_size)
         {
             Logger::get()->warn("Malformed packet_size: {}", packet_size);

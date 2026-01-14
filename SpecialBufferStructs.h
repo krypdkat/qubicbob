@@ -88,59 +88,6 @@ public:
 
         return true;
     }
-    
-    /**
-     * @brief Retrieves a packet from the buffer.
-     *
-     * This function is thread-safe. It will wait until a complete packet is available.
-     * @param out_ptr A pointer to a buffer where the packet data will be copied.
-     * This buffer MUST be large enough to hold the largest possible packet.
-     * @param[out] size The actual size of the retrieved packet.
-     * @return True if a packet was retrieved, false if the operation was interrupted or failed.
-     */
-    bool GetPacket(uint8_t* out_ptr, uint32_t& size) {
-        if (!out_ptr) {
-            return false;
-        }
-
-        std::unique_lock<std::mutex> lock(mtx_);
-
-        // Wait until there's at least enough data for a header.
-        cv_not_empty_.wait(lock, [this] {
-            return size_ >= sizeof(RequestResponseHeader);
-        });
-
-        // Peek at the header to determine the full packet size.
-        RequestResponseHeader header;
-        peek_data(reinterpret_cast<uint8_t*>(&header), sizeof(RequestResponseHeader));
-        const uint32_t packet_size = header.size();
-
-        // Now, wait until the *entire* packet is available in the buffer.
-        cv_not_empty_.wait(lock, [this, packet_size] {
-            return size_ >= packet_size;
-        });
-
-        // The full packet is available, so we can copy it out.
-        if (head_ + packet_size <= capacity_) {
-            // The packet can be read in a single contiguous block.
-            memcpy(out_ptr, buffer_.data() + head_, packet_size);
-        } else {
-            // The packet is wrapped around the buffer's end.
-            size_t first_chunk_size = capacity_ - head_;
-            memcpy(out_ptr, buffer_.data() + head_, first_chunk_size);
-            memcpy(out_ptr + first_chunk_size, buffer_.data(), packet_size - first_chunk_size);
-        }
-
-        // Update head pointer, current size, and the output size parameter.
-        head_ = (head_ + packet_size) % capacity_;
-        size_ -= packet_size;
-        size = packet_size;
-
-        // Notify one waiting producer that space is now available.
-        cv_not_full_.notify_one();
-
-        return true;
-    }
 
     bool TryGetPacket(uint8_t *out_ptr, uint32_t &size) {
         if (!out_ptr) {

@@ -58,7 +58,7 @@ TEST_F(MutexRoundBufferTest, BasicEnqueueDequeue) {
 
     std::vector<uint8_t> receivedPacket(BUFFER_CAPACITY);
     uint32_t receivedSize = 0;
-    ASSERT_TRUE(buffer.GetPacket(receivedPacket.data(), receivedSize));
+    ASSERT_TRUE(buffer.TryGetPacket(receivedPacket.data(), receivedSize));
 
     ASSERT_EQ(receivedSize, testPacket.size());
     receivedPacket.resize(receivedSize);
@@ -79,15 +79,15 @@ TEST_F(MutexRoundBufferTest, MultiplePacketSequence) {
     std::vector<uint8_t> out(BUFFER_CAPACITY);
     uint32_t outSize = 0;
 
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
     ASSERT_EQ(outSize, packet1.size());
     ASSERT_EQ(0, memcmp(out.data(), packet1.data(), outSize));
 
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
     ASSERT_EQ(outSize, packet2.size());
     ASSERT_EQ(0, memcmp(out.data(), packet2.data(), outSize));
 
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
     ASSERT_EQ(outSize, packet3.size());
     ASSERT_EQ(0, memcmp(out.data(), packet3.data(), outSize));
 }
@@ -102,12 +102,12 @@ TEST_F(MutexRoundBufferTest, WraparoundWrite) {
 
     uint32_t outSize = 0;
     std::vector<uint8_t> out(100);
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize)); // Make space
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize)); // Make space
     ASSERT_EQ(outSize, packet1.size());
 
     ASSERT_TRUE(buffer.EnqueuePacket(packet2.data())); // Should now be at tail=70, needs to wrap
 
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
     ASSERT_EQ(outSize, packet2.size());
     ASSERT_EQ(0, memcmp(out.data(), packet2.data(), outSize));
 }
@@ -122,13 +122,13 @@ TEST_F(MutexRoundBufferTest, WraparoundRead) {
     ASSERT_TRUE(buffer.EnqueuePacket(packet1.data()));
     std::vector<uint8_t> out(100);
     uint32_t outSize = 0;
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
 
     // Enqueue a packet that will wrap
     ASSERT_TRUE(buffer.EnqueuePacket(packet2.data())); // tail becomes (70+50)%100 = 20, head is 70
 
     // Now get the wrapped packet
-    ASSERT_TRUE(buffer.GetPacket(out.data(), outSize));
+    ASSERT_TRUE(buffer.TryGetPacket(out.data(), outSize));
     ASSERT_EQ(outSize, packet2.size());
     ASSERT_EQ(0, memcmp(out.data(), packet2.data(), outSize));
 }
@@ -140,9 +140,9 @@ TEST_F(MutexRoundBufferTest, InvalidInputs) {
     // Enqueue nullptr
     ASSERT_FALSE(buffer.EnqueuePacket(nullptr));
 
-    // GetPacket with nullptr
+    // TryGetPacket with nullptr
     uint32_t size = 0;
-    ASSERT_FALSE(buffer.GetPacket(nullptr, size));
+    ASSERT_FALSE(buffer.TryGetPacket(nullptr, size));
 
     // Packet larger than capacity
     auto largePacket = createTestPacket(BUFFER_CAPACITY + 1, 99);
@@ -172,7 +172,7 @@ TEST_F(MutexRoundBufferTest, SingleProducerSingleConsumer) {
         for (int i = 0; i < num_packets; ++i) {
             std::vector<uint8_t> out(BUFFER_CAPACITY);
             uint32_t outSize = 0;
-            buffer.GetPacket(out.data(), outSize);
+            buffer.TryGetPacket(out.data(), outSize);
             out.resize(outSize);
             received_packets.push_back(out);
         }
@@ -210,7 +210,7 @@ TEST_F(MutexRoundBufferTest, MultipleProducersSingleConsumer) {
         for (int i = 0; i < total_packets; ++i) {
             std::vector<uint8_t> out(BUFFER_CAPACITY);
             uint32_t outSize = 0;
-            buffer.GetPacket(out.data(), outSize);
+            buffer.TryGetPacket(out.data(), outSize);
             out.resize(outSize);
             received_packets.push_back(out);
         }
