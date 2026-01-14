@@ -7,6 +7,7 @@
 #include "LogWebSocket.h"
 #include "QubicRpcWebSocket.h"
 #include "QubicRpcHandler.h"
+#include "QubicSubscriptionManager.h"
 
 #include <string>
 #include <thread>
@@ -1164,6 +1165,9 @@ void startRESTServer() {
 }
 
 void stopRESTServer() {
+    // First, shutdown subscription manager to stop catch-up threads
+    QubicSubscriptionManager::instance().shutdown();
+
     // This will trigger a graceful shutdown; if the app isn't running, it's a no-op.
     drogon::app().quit();
     Logger::get()->info("Stop REST API server");

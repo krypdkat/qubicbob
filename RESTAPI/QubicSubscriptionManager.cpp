@@ -18,6 +18,32 @@ QubicSubscriptionManager& QubicSubscriptionManager::instance() {
     return instance;
 }
 
+void QubicSubscriptionManager::shutdown() {
+    Logger::get()->debug("QubicSubscriptionManager: signaling shutdown");
+    stopFlag_.store(true);
+
+    // Wait for all catch-up threads to finish (max 5 seconds)
+    int waitCount = 0;
+    while (activeCatchUpThreads_.load() > 0 && waitCount < 50) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        waitCount++;
+    }
+
+    if (activeCatchUpThreads_.load() > 0) {
+        Logger::get()->warn("QubicSubscriptionManager: {} catch-up threads still running after timeout",
+                           activeCatchUpThreads_.load());
+    } else {
+        Logger::get()->debug("QubicSubscriptionManager: all catch-up threads stopped");
+    }
+
+    // Clear all subscriptions
+    {
+        std::unique_lock lock(mutex_);
+        subscriptions_.clear();
+        clientSubscriptions_.clear();
+    }
+}
+
 void QubicSubscriptionManager::addClient(const drogon::WebSocketConnectionPtr& conn) {
     std::unique_lock lock(mutex_);
     clientSubscriptions_[conn] = {};
@@ -723,10 +749,23 @@ void QubicSubscriptionManager::performCatchUp(
     uint32_t toTick)
 {
     // Run catch-up in a separate thread to avoid blocking
+    activeCatchUpThreads_.fetch_add(1);
     std::thread([this, conn, subId, fromTick, toTick]() {
+        // RAII guard to decrement thread count on exit
+        struct ThreadGuard {
+            std::atomic<int>& counter;
+            ~ThreadGuard() { counter.fetch_sub(1); }
+        } guard{activeCatchUpThreads_};
+
         Logger::get()->info("Starting TickStream catch-up {} from {} to {}", subId, fromTick, toTick);
 
         for (uint32_t tick = fromTick; tick <= toTick; ++tick) {
+            // Check if shutdown is requested
+            if (stopFlag_.load()) {
+                Logger::get()->debug("TickStream catch-up {} aborted: shutdown requested", subId);
+                return;
+            }
+
             // Check if connection is still valid
             if (!conn->connected()) {
                 Logger::get()->debug("TickStream catch-up {} aborted: connection closed", subId);
@@ -870,6 +909,12 @@ void QubicSubscriptionManager::performCatchUp(
 
         // Drain pending ticks that arrived during catch-up
         while (true) {
+            // Check if shutdown is requested
+            if (stopFlag_.load()) {
+                Logger::get()->debug("TickStream {} pending drain aborted: shutdown requested", subId);
+                return;
+            }
+
             // Check if connection is still valid
             if (!conn->connected()) {
                 Logger::get()->debug("TickStream {} pending drain aborted: connection closed", subId);

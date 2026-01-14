@@ -88,6 +88,9 @@ class QubicSubscriptionManager {
 public:
     static QubicSubscriptionManager& instance();
 
+    // Shutdown - signal all catch-up threads to stop and wait for them
+    void shutdown();
+
     // Client lifecycle
     void addClient(const drogon::WebSocketConnectionPtr& conn);
     void removeClient(const drogon::WebSocketConnectionPtr& conn);
@@ -159,4 +162,10 @@ private:
 
     // Counter for generating subscription IDs
     std::atomic<uint64_t> subscriptionCounter_{0};
+
+    // Shutdown flag for catch-up threads
+    std::atomic<bool> stopFlag_{false};
+
+    // Count of active catch-up threads
+    std::atomic<int> activeCatchUpThreads_{0};
 };
