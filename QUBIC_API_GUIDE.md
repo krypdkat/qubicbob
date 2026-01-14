@@ -1271,17 +1271,20 @@ Connect to `ws://your-node:40420/ws/qubic` for real-time updates.
 
 ### Available Subscription Types
 
-| Type | Description |
-|------|-------------|
-| `newTicks` | New tick notifications |
-| `logs` | Log events matching filter |
-| `transfers` | QU transfer events (specialized log filter) |
-| `tickStream` | Full tick stream with transactions and logs |
+| Type | Description | Catch-Up Support |
+|------|-------------|------------------|
+| `newTicks` | New tick notifications | No |
+| `logs` | Log events matching filter | Yes (logId-based) |
+| `transfers` | QU transfer events (specialized log filter) | Yes (logId-based) |
+| `tickStream` | Full tick stream with transactions and logs | Yes (tick-based) |
 
 ---
 
 ### Subscribe to New Ticks
 
+Subscribe to new tick notifications. This is a lightweight subscription that only sends basic tick metadata.
+
+**Request:**
 ```json
 {
   "jsonrpc": "2.0",
@@ -1304,9 +1307,17 @@ Connect to `ws://your-node:40420/ws/qubic` for real-time updates.
   "params": {
     "subscription": "qubic_sub_0",
     "result": {
-      "tickNumber": 12500001,
-      "epoch": 150,
-      ...
+      "tickNumber": 42100500,
+      "epoch": 193,
+      "computorIndex": 500,
+      "signature": "0xa1b2c3d4...",
+      "tickHash": "0xdeadbeef...",
+      "timestamp": 1736860245,
+      "timestampISO": "2025-01-14T10:30:45Z",
+      "millisecond": 123,
+      "timelock": "0x...",
+      "transactionCount": 15,
+      "previousTickHash": "0x..."
     }
   }
 }
@@ -1320,8 +1331,9 @@ Connect to `ws://your-node:40420/ws/qubic` for real-time updates.
 
 ### Subscribe to Transfers
 
-Monitor transfers for specific identities:
+Monitor QU transfers for specific identities. This is a specialized log subscription filtered to `QU_TRANSFER` events only.
 
+**Request (basic):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -1331,10 +1343,90 @@ Monitor transfers for specific identities:
 }
 ```
 
+**Request (with catch-up):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscribe",
+  "params": ["transfers", {
+    "identity": ["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID"],
+    "startLogId": 1234567890,
+    "startEpoch": 193
+  }],
+  "id": 1
+}
+```
+
+**Filter Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `identity` | string or array | Filter by identity (source or destination) |
+| `startLogId` | number | Optional. Start log ID for catch-up |
+| `startEpoch` | number | Optional. Epoch for startLogId (defaults to current epoch) |
+
+**Response:**
+```json
+{"jsonrpc":"2.0","result":"qubic_sub_1","id":1}
+```
+
+**Subscription notifications:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_1",
+    "result": {
+      "ok": true,
+      "epoch": 193,
+      "tick": 42100500,
+      "type": 0,
+      "logId": 1234567900,
+      "logDigest": "a1b2c3d4e5f60718",
+      "bodySize": 72,
+      "logTypename": "QU_TRANSFER",
+      "timestamp": "25-01-14 10:30:45",
+      "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
+      "body": {
+        "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+        "amount": 5000000
+      },
+      "isCatchUp": false
+    }
+  }
+}
+```
+
+**Result Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ok` | boolean | Always `true` for valid logs |
+| `epoch` | number | Epoch of the log |
+| `tick` | number | Tick number |
+| `type` | number | Log type (always 0 for transfers) |
+| `logId` | number | Unique log ID within the epoch |
+| `logDigest` | string | 16-char hex digest of the log |
+| `bodySize` | number | Size of log body in bytes |
+| `logTypename` | string | Human-readable log type name |
+| `timestamp` | string | Timestamp string (YY-MM-DD HH:MM:SS) |
+| `txHash` | string | Transaction hash that generated this log |
+| `body` | object | Parsed log body (source, destination, amount) |
+| `isCatchUp` | boolean | `true` if this is historical data from catch-up |
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_subscribe` with `"logs"` and Transfer event filter |
+
 ---
 
 ### Subscribe to Logs
 
+Subscribe to log events with optional filters. Supports catch-up from a specific log ID.
+
+**Request (basic):**
 ```json
 {
   "jsonrpc": "2.0",
@@ -1346,6 +1438,78 @@ Monitor transfers for specific identities:
   "id": 1
 }
 ```
+
+**Request (with catch-up):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscribe",
+  "params": ["logs", {
+    "identity": ["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID"],
+    "logType": [0, 1, 2],
+    "startLogId": 1234567890,
+    "startEpoch": 193
+  }],
+  "id": 1
+}
+```
+
+**Filter Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `identity` | string or array | Filter by identity (source or destination) |
+| `logType` | number or array | Filter by log type(s) |
+| `startLogId` | number | Optional. Start log ID for catch-up |
+| `startEpoch` | number | Optional. Epoch for startLogId (defaults to current epoch) |
+
+**Response:**
+```json
+{"jsonrpc":"2.0","result":"qubic_sub_2","id":1}
+```
+
+**Subscription notifications:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_2",
+    "result": {
+      "ok": true,
+      "epoch": 193,
+      "tick": 42100500,
+      "type": 2,
+      "logId": 1234567901,
+      "logDigest": "b2c3d4e5f6071829",
+      "bodySize": 120,
+      "logTypename": "ASSET_OWNERSHIP_CHANGE",
+      "timestamp": "25-01-14 10:30:46",
+      "txHash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
+      "body": {
+        "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
+        "newOwner": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+        "assetName": "QFT",
+        "numberOfShares": 1000
+      },
+      "isCatchUp": true
+    }
+  }
+}
+```
+
+**Catch-Up Behavior:**
+
+When `startLogId` is specified:
+1. The subscription is created immediately
+2. Historical logs from `startLogId` to current are sent with `isCatchUp: true`
+3. Real-time logs that arrive during catch-up are queued (up to 10,000 logs)
+4. After catch-up completes, queued logs are delivered, then real-time continues with `isCatchUp: false`
+
+**Queue Mode:**
+- If the client is more than 10,000 logs behind, real-time logs are skipped (not queued) to prevent memory exhaustion
+- Once within 10,000 logs of current, real-time logs start being queued
+- This ensures efficient catch-up without unbounded memory growth
 
 | Ethereum Equivalent |
 |---------------------|
@@ -1454,49 +1618,115 @@ This is ideal for:
   "jsonrpc": "2.0",
   "method": "qubic_subscription",
   "params": {
-    "subscription": "qubic_sub_1",
+    "subscription": "qubic_sub_3",
     "result": {
-      "epoch": 150,
-      "tick": 12500001,
+      "tick": 42100500,
+      "epoch": 193,
       "isCatchUp": false,
-      "timestamp": "2025-01-15T10:30:45Z",
-      "totalLogs": 42,
-      "filteredLogs": 5,
+      "timestamp": "2025-01-14T10:30:45Z",
       "totalTxs": 15,
       "filteredTxs": 3,
+      "totalLogs": 42,
+      "filteredLogs": 5,
       "transactions": [
         {
           "hash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
-          "from": "SOURCEIDENTITY...",
-          "to": "DESTIDENTITY...",
-          "amount": 1000000,
+          "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+          "amount": 5000000,
           "inputType": 0,
           "inputSize": 0,
           "inputData": "",
           "executed": true,
-          "logIdFrom": 12345678,
+          "logIdFrom": 1234567900,
+          "logIdLength": 1
+        },
+        {
+          "hash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
+          "from": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+          "to": "CFBMEMZOIDEXQAUXYYSZIURADQLAPWPMNJXQSNVQJADFYLJCRRTFPBQGIM",
+          "amount": 1000000,
+          "inputType": 1,
+          "inputSize": 32,
+          "inputData": "0x0102030405060708091011121314151617181920212223242526272829303132",
+          "executed": true,
+          "logIdFrom": 1234567901,
           "logIdLength": 2
+        },
+        {
+          "hash": "cdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghij",
+          "from": "DDDIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "to": "EEEIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "amount": 100,
+          "inputType": 0,
+          "inputSize": 0,
+          "inputData": "",
+          "executed": false,
+          "logIdFrom": -1,
+          "logIdLength": 0
         }
       ],
       "logs": [
         {
           "ok": true,
-          "epoch": 150,
-          "tick": 12500001,
+          "epoch": 193,
+          "tick": 42100500,
           "type": 0,
-          "logId": 12345678,
+          "logId": 1234567900,
           "logDigest": "a1b2c3d4e5f60718",
           "bodySize": 72,
           "logTypename": "QU_TRANSFER",
-          "timestamp": "25-01-11 14:30:45",
+          "timestamp": "25-01-14 10:30:45",
           "txHash": "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh",
+          "txIndex": 0,
           "body": {
-            "from": "SOURCEIDENTITY...",
-            "to": "DESTIDENTITY...",
+            "from": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "to": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+            "amount": 5000000
+          }
+        },
+        {
+          "ok": true,
+          "epoch": 193,
+          "tick": 42100500,
+          "type": 0,
+          "logId": 1234567901,
+          "logDigest": "b2c3d4e5f6071829",
+          "bodySize": 72,
+          "logTypename": "QU_TRANSFER",
+          "timestamp": "25-01-14 10:30:45",
+          "txHash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
+          "txIndex": 1,
+          "body": {
+            "from": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+            "to": "CFBMEMZOIDEXQAUXYYSZIURADQLAPWPMNJXQSNVQJADFYLJCRRTFPBQGIM",
             "amount": 1000000
           }
         }
       ]
+    }
+  }
+}
+```
+
+**Empty Tick Notification (when `skipEmptyTicks: false`):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_subscription",
+  "params": {
+    "subscription": "qubic_sub_3",
+    "result": {
+      "tick": 42100501,
+      "epoch": 193,
+      "isCatchUp": false,
+      "timestamp": "2025-01-14T10:30:46Z",
+      "totalTxs": 0,
+      "filteredTxs": 0,
+      "totalLogs": 0,
+      "filteredLogs": 0,
+      "transactions": [],
+      "logs": []
     }
   }
 }
@@ -1547,6 +1777,9 @@ When `skipEmptyTicks` is `true`, ticks with no matching transactions or logs are
 
 ### Unsubscribe
 
+Cancel an active subscription.
+
+**Request:**
 ```json
 {
   "jsonrpc": "2.0",
@@ -1556,10 +1789,19 @@ When `skipEmptyTicks` is `true`, ticks with no matching transactions or logs are
 }
 ```
 
-**Response:**
+**Response (success):**
 ```json
 {"jsonrpc":"2.0","result":true,"id":1}
 ```
+
+**Response (not found):**
+```json
+{"jsonrpc":"2.0","result":false,"id":1}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_unsubscribe` |
 
 ---
 
@@ -1620,8 +1862,10 @@ Standard JSON-RPC 2.0 error codes:
 1. **Track deposits by identity**: Use `qubic_getTransfers` with your deposit addresses, logType `QU_TRANSFER`
 2. **Poll vs subscribe**: Use WebSocket subscriptions for real-time, HTTP for historical
 3. **Real-time streaming**: Use `tickStream` subscription for comprehensive real-time chain monitoring with transaction execution status
-4. **No confirmations needed**: Qubic ticks are immediately final
-5. **Epoch awareness**: Balance/state resets at epoch boundaries
-6. **Rate limiting**: Limit log queries to 1000 ticks max per request
-7. **Identity validation**: Verify identities (60 uppercase characters; checksum)
-8. **Transaction execution**: Check `executed` field in tickStream transactions to verify successful execution
+4. **Resumable subscriptions**: Use `startLogId` parameter with `logs` or `transfers` subscriptions to resume from a known position after reconnection
+5. **No confirmations needed**: Qubic ticks are immediately final
+6. **Epoch awareness**: Balance/state resets at epoch boundaries; catch-up requires correct `startEpoch` parameter
+7. **Rate limiting**: Limit log queries to 1000 ticks max per request
+8. **Identity validation**: Verify identities (60 uppercase characters; checksum)
+9. **Transaction execution**: Check `executed` field in tickStream transactions to verify successful execution
+10. **Catch-up awareness**: Check `isCatchUp` field in subscription notifications to distinguish historical from real-time data
