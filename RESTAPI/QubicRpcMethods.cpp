@@ -1168,3 +1168,61 @@ Json::Value QubicRpcMethods::getAllAssetTransfers(const Json::Value& filterParam
 
     return result;
 }
+
+// ============================================================================
+// Smart Contract Methods
+// ============================================================================
+
+Json::Value QubicRpcMethods::querySmartContract(const Json::Value& params) {
+    // Validate required parameters
+    if (!params.isMember("nonce") || !params["nonce"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: nonce (uint32)";
+        return error;
+    }
+    if (!params.isMember("scIndex") || !params["scIndex"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: scIndex (uint32)";
+        return error;
+    }
+    if (!params.isMember("funcNumber") || !params["funcNumber"].isNumeric()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: funcNumber (uint32)";
+        return error;
+    }
+    if (!params.isMember("data") || !params["data"].isString()) {
+        Json::Value error;
+        error["error"] = "Missing required parameter: data (hex string)";
+        return error;
+    }
+
+    uint32_t nonce = static_cast<uint32_t>(params["nonce"].asUInt64());
+    uint32_t scIndex = params["scIndex"].asUInt();
+    uint32_t funcNumber = params["funcNumber"].asUInt();
+    std::string data = params["data"].asString();
+
+    // Use the shared helper
+    SmartContractQueryResult queryResult = ApiHelpers::querySmartContract(nonce, scIndex, funcNumber, data);
+
+    Json::Value result;
+    result["nonce"] = nonce;
+
+    if (!queryResult.error.empty()) {
+        result["error"] = queryResult.error;
+        return result;
+    }
+
+    if (queryResult.success) {
+        result["data"] = queryResult.data;
+        return result;
+    }
+
+    if (queryResult.pending) {
+        result["pending"] = true;
+        result["message"] = "Query enqueued; poll again with the same nonce to get the result";
+        return result;
+    }
+
+    result["error"] = "Unknown error";
+    return result;
+}

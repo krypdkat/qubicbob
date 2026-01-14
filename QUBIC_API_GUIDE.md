@@ -1081,6 +1081,116 @@ Returns logs by ID range (same as `/log/{epoch}/{from_id}/{to_id}` REST endpoint
 
 ---
 
+### Smart Contract Methods
+
+#### qubic_querySmartContract
+
+Query a smart contract function. This is an asynchronous operation - the first call enqueues the query, and subsequent calls with the same nonce retrieve the result.
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "qubic_querySmartContract",
+  "params": [{
+    "nonce": 12345,
+    "scIndex": 1,
+    "funcNumber": 1,
+    "data": "0x00000000"
+  }],
+  "id": 1
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `nonce` | number | Yes | Unique identifier for this query (used for caching and retrieval) |
+| `scIndex` | number | Yes | Smart contract index (1-based) |
+| `funcNumber` | number | Yes | Function number to call |
+| `data` | string | Yes | Hex-encoded input data (with or without 0x prefix) |
+
+**Response (success - result available):**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "nonce": 12345,
+    "data": "0102030405060708..."
+  },
+  "id": 1
+}
+```
+
+**Response (pending - query enqueued):**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "nonce": 12345,
+    "pending": true,
+    "message": "Query enqueued; poll again with the same nonce to get the result"
+  },
+  "id": 1
+}
+```
+
+**Response (error):**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "nonce": 12345,
+    "error": "Bob has no connection to any BM"
+  },
+  "id": 1
+}
+```
+
+**Usage Pattern:**
+
+1. Send initial query with a unique nonce
+2. If response contains `pending: true`, poll again with the same nonce
+3. Results are cached for ~60 seconds, so use the same nonce to retrieve cached results
+4. Use unique nonces for different queries to avoid cache collisions
+
+**Example - Query with polling:**
+```javascript
+async function querySmartContract(scIndex, funcNumber, inputData) {
+  const nonce = Date.now(); // Use timestamp as unique nonce
+
+  let result;
+  for (let i = 0; i < 30; i++) { // Poll for up to 3 seconds
+    const response = await rpc('qubic_querySmartContract', [{
+      nonce,
+      scIndex,
+      funcNumber,
+      data: inputData
+    }]);
+
+    if (response.data) {
+      return response.data; // Success!
+    }
+
+    if (response.error && response.error !== 'pending') {
+      throw new Error(response.error);
+    }
+
+    // Wait 100ms before next poll
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  throw new Error('Query timeout');
+}
+```
+
+| Ethereum Equivalent |
+|---------------------|
+| `eth_call` |
+
+---
+
 ## Code Examples
 
 ### JavaScript (Node.js)
@@ -1399,6 +1509,8 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 }
 ```
 
+> **Note:** The log format is identical to the `/ws/log` WebSocket endpoint format, making it easy to migrate between endpoints.
+
 **Result Fields:**
 
 | Field | Type | Description |
@@ -1413,7 +1525,7 @@ Monitor QU transfers for specific identities. This is a specialized log subscrip
 | `logTypename` | string | Human-readable log type name |
 | `timestamp` | string | Timestamp string (YY-MM-DD HH:MM:SS) |
 | `txHash` | string | Transaction hash that generated this log |
-| `body` | object | Parsed log body (source, destination, amount) |
+| `body` | object | Parsed log body (from, to, amount for QU_TRANSFER) |
 | `isCatchUp` | boolean | `true` if this is historical data from catch-up |
 
 | Ethereum Equivalent |
@@ -1487,8 +1599,8 @@ Subscribe to log events with optional filters. Supports catch-up from a specific
       "timestamp": "25-01-14 10:30:46",
       "txHash": "bcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghi",
       "body": {
-        "issuer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFUDG",
-        "newOwner": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
+        "sourcePublicKey": "ANOTHERIDENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "destinationPublicKey": "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARMID",
         "assetName": "QFT",
         "numberOfShares": 1000
       },
@@ -1497,6 +1609,8 @@ Subscribe to log events with optional filters. Supports catch-up from a specific
   }
 }
 ```
+
+> **Note:** The log format is identical to the `/ws/log` WebSocket endpoint format, making it easy to migrate between endpoints.
 
 **Catch-Up Behavior:**
 
@@ -1836,7 +1950,8 @@ Cancel an active subscription.
 | N/A | `qubic_getAllAssetTransfers` |
 | N/A | `qubic_getAssetBalance` |
 | N/A | `qubic_getAssets` (not implemented) |
-| N/A | `qubic_broadcastTransaction` (not implemented) |
+| `eth_sendRawTransaction` | `qubic_broadcastTransaction` |
+| `eth_call` | `qubic_querySmartContract` |
 
 ---
 

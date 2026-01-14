@@ -261,6 +261,13 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
             return makeResult(id, QubicRpcMethods::getAllAssetTransfers(params[0]));
         }
 
+        if (method == "qubic_querySmartContract") {
+            if (!params.isArray() || params.size() < 1) {
+                return makeError(id, QubicRpcError::INVALID_PARAMS, "Missing parameters");
+            }
+            return makeResult(id, QubicRpcMethods::querySmartContract(params[0]));
+        }
+
         // Method not found - return null so caller can handle subscription methods
         return Json::Value::null;
 

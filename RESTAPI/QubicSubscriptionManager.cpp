@@ -202,8 +202,6 @@ void QubicSubscriptionManager::onNewLogs(uint32_t tick, const std::vector<LogEve
         LogRangesPerTxInTick lr{-1};
         db_try_get_log_ranges(tick, lr);
 
-        uint64_t logIndexInTick = 0;
-
         for (const auto& log : logs) {
             // Find transaction index
             int txIndex = 0;
@@ -218,17 +216,27 @@ void QubicSubscriptionManager::onNewLogs(uint32_t tick, const std::vector<LogEve
                 }
             }
 
-            // Convert to Qubic log format
-            Json::Value qubicLog = QubicRpc::logEventToQubicLog(log, td, txIndex, logIndexInTick++);
+            // Convert to log format (same as LogSubscriptionManager)
+            Json::Value qubicLog = const_cast<LogEvent&>(log).parseToJsonValueWithExtraData(td, txIndex);
 
-            // Get source/destination identities for filtering
+            // Get source/destination identities for filtering (from body.from/to)
             std::string sourceIdentity;
             std::string destIdentity;
-            if (qubicLog.isMember("source")) {
-                sourceIdentity = qubicLog["source"].asString();
-            }
-            if (qubicLog.isMember("destination")) {
-                destIdentity = qubicLog["destination"].asString();
+            if (qubicLog.isMember("body") && qubicLog["body"].isObject()) {
+                const auto& body = qubicLog["body"];
+                if (body.isMember("from")) {
+                    sourceIdentity = body["from"].asString();
+                }
+                if (body.isMember("to")) {
+                    destIdentity = body["to"].asString();
+                }
+                // Also check sourcePublicKey/destinationPublicKey for asset transfers
+                if (body.isMember("sourcePublicKey")) {
+                    sourceIdentity = body["sourcePublicKey"].asString();
+                }
+                if (body.isMember("destinationPublicKey")) {
+                    destIdentity = body["destinationPublicKey"].asString();
+                }
             }
 
             // Check all log and transfer subscriptions
@@ -1245,17 +1253,27 @@ void QubicSubscriptionManager::performLogsCatchUp(
                     }
                 }
 
-                // Convert to Qubic log format
-                Json::Value qubicLog = QubicRpc::logEventToQubicLog(log, td, txIndex, 0);
+                // Convert to log format (same as LogSubscriptionManager)
+                Json::Value qubicLog = log.parseToJsonValueWithExtraData(td, txIndex);
 
-                // Get source/destination identities for filtering
+                // Get source/destination identities for filtering (from body.from/to)
                 std::string sourceIdentity;
                 std::string destIdentity;
-                if (qubicLog.isMember("source")) {
-                    sourceIdentity = qubicLog["source"].asString();
-                }
-                if (qubicLog.isMember("destination")) {
-                    destIdentity = qubicLog["destination"].asString();
+                if (qubicLog.isMember("body") && qubicLog["body"].isObject()) {
+                    const auto& body = qubicLog["body"];
+                    if (body.isMember("from")) {
+                        sourceIdentity = body["from"].asString();
+                    }
+                    if (body.isMember("to")) {
+                        destIdentity = body["to"].asString();
+                    }
+                    // Also check sourcePublicKey/destinationPublicKey for asset transfers
+                    if (body.isMember("sourcePublicKey")) {
+                        sourceIdentity = body["sourcePublicKey"].asString();
+                    }
+                    if (body.isMember("destinationPublicKey")) {
+                        destIdentity = body["destinationPublicKey"].asString();
+                    }
                 }
 
                 // Check if log matches filter
@@ -1353,8 +1371,8 @@ void QubicSubscriptionManager::performLogsCatchUp(
                 }
             }
 
-            // Convert to Qubic log format
-            Json::Value qubicLog = QubicRpc::logEventToQubicLog(pendingLog->log, pendingTd, txIndex, 0);
+            // Convert to log format (same as LogSubscriptionManager)
+            Json::Value qubicLog = pendingLog->log.parseToJsonValueWithExtraData(pendingTd, txIndex);
             // No isCatchUp field for real-time logs
 
             try {

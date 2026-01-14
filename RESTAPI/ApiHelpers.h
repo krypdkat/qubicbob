@@ -83,6 +83,14 @@ struct BroadcastResult {
     std::string error;       // Error message on failure
 };
 
+struct SmartContractQueryResult {
+    bool success = false;
+    bool pending = false;    // True if query was enqueued but result not yet available
+    uint32_t nonce = 0;
+    std::string data;        // hex-encoded response data
+    std::string error;
+};
+
 // ============================================================================
 // Shared Helper Functions (Core Logic)
 // ============================================================================
@@ -114,6 +122,20 @@ SyncStatus getSyncStatus();
 // @param signedTxHex: hex-encoded signed transaction (with or without 0x prefix)
 // @return BroadcastResult with txHash on success, error message on failure
 BroadcastResult broadcastTransaction(const std::string& signedTxHex);
+
+// Query a smart contract (synchronous - checks cache only)
+// @param nonce: unique identifier for this query (used for caching)
+// @param scIndex: smart contract index
+// @param funcNumber: function number to call
+// @param inputDataHex: hex-encoded input data (with or without 0x prefix)
+// @return SmartContractQueryResult with response data or pending status
+SmartContractQueryResult querySmartContract(uint32_t nonce, uint32_t scIndex,
+                                             uint32_t funcNumber, const std::string& inputDataHex);
+
+// Check if a smart contract query result is available (by nonce)
+// @param nonce: unique identifier for the query
+// @return SmartContractQueryResult with response data if available
+SmartContractQueryResult checkSmartContractResult(uint32_t nonce);
 
 // ============================================================================
 // Utility Functions

@@ -500,11 +500,6 @@ namespace {
                 "/querySmartContract",
                 [](const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     try {
-        if (gNumBMConnection == 0)
-        {
-            callback(makeError("Bob has no connection to any BM"));
-            return;
-        }
         auto jsonPtr = req->getJsonObject();
         if (!jsonPtr) {
             callback(makeError("Invalid or missing JSON body"));
@@ -512,6 +507,7 @@ namespace {
         }
         const auto &j = *jsonPtr;
 
+        // Validate required parameters
         if (!j.isMember("nonce") || !j["nonce"].isUInt64()) {
             callback(makeError("nonce (uint32) is required"));
             return;
@@ -532,86 +528,57 @@ namespace {
         const uint32_t nonce = static_cast<uint32_t>(j["nonce"].asUInt64());
         const uint32_t scIndex = static_cast<uint32_t>(j["scIndex"].asUInt());
         const uint32_t funcNumber = static_cast<uint32_t>(j["funcNumber"].asUInt());
-        std::string hex = j["data"].asString();
+        const std::string data = j["data"].asString();
 
-        // normalize hex
-        if (hex.rfind("0x", 0) == 0 || hex.rfind("0X", 0) == 0) hex = hex.substr(2);
-        if (hex.size() % 2 != 0) {
-            callback(makeError("data hex length must be even"));
+        // Use shared helper for initial query
+        SmartContractQueryResult queryResult = ApiHelpers::querySmartContract(nonce, scIndex, funcNumber, data);
+
+        // Handle errors
+        if (!queryResult.error.empty()) {
+            callback(makeError(queryResult.error));
             return;
         }
-        auto isHex = [](char c) {
-            return (c >= '0' && c <= '9') ||
-                   (c >= 'a' && c <= 'f') ||
-                   (c >= 'A' && c <= 'F');
-        };
-        for (char c : hex) {
-            if (!isHex(c)) {
-                callback(makeError("data must be a hex string"));
-                return;
-            }
-        }
-        std::vector<uint8_t> dataBytes;
-        dataBytes.reserve(hex.length() / 2);
-        for (size_t i = 0; i < hex.length(); i += 2) {
-            uint8_t byte = static_cast<uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16));
-            dataBytes.push_back(byte);
+
+        // If result is immediately available, return it
+        if (queryResult.success) {
+            Json::Value root;
+            root["nonce"] = nonce;
+            root["data"] = queryResult.data;
+            Json::FastWriter writer;
+            callback(makeJsonResponse(writer.write(root)));
+            return;
         }
 
-        // 1) Try immediate cache hit
-        {
-            std::vector<uint8_t> out;
-            if (responseSCData.get(nonce, out)) {
-                Json::Value root;
-                root["nonce"] = nonce;
-                // reuse helper from bobAPI.cpp if exposed, otherwise inline:
-                {
-                    std::stringstream ss;
-                    ss << std::hex << std::setfill('0');
-                    for (const auto& b : out) ss << std::setw(2) << static_cast<int>(b);
-                    root["data"] = ss.str();
-                }
-                Json::FastWriter writer;
-                callback(makeJsonResponse(writer.write(root)));
-                return;
-            }
-        }
-
-        // 2) Enqueue the request (non-blocking)
-        enqueueSmartContractRequest(nonce, scIndex, funcNumber, dataBytes.data(), static_cast<uint32_t>(dataBytes.size()));
-
-        // 3) Use Drogon's event loop timer instead of detached thread
+        // Result is pending - poll with timeout using event loop
         auto sharedCallback = std::make_shared<std::function<void(const HttpResponsePtr&)>>(std::move(callback));
         auto attemptCount = std::make_shared<int>(0);
         auto startTime = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
-        
-        auto loop = drogon::app().getIOLoop(0);  // Get an event loop
 
-        // Use a shared_ptr to the function for proper capture
+        auto loop = drogon::app().getIOLoop(0);
+
         auto pollResultPtr = std::make_shared<std::function<void()>>();
         std::weak_ptr<std::function<void()>> pollResultWeak = pollResultPtr;
-        
+
         *pollResultPtr = [nonce, sharedCallback, attemptCount, startTime, loop, pollResultWeak]() {
-            std::vector<uint8_t> out;
-            if (responseSCData.get(nonce, out)) {
+            // Check for result using shared helper
+            SmartContractQueryResult result = ApiHelpers::checkSmartContractResult(nonce);
+
+            if (result.success) {
                 Json::Value root;
                 root["nonce"] = nonce;
-                std::stringstream ss;
-                ss << std::hex << std::setfill('0');
-                for (const auto& b : out) ss << std::setw(2) << static_cast<int>(b);
-                root["data"] = ss.str();
+                root["data"] = result.data;
                 Json::FastWriter writer;
                 (*sharedCallback)(makeJsonResponse(writer.write(root)));
                 return;
             }
-            
-            // Add timeout check to prevent infinite polling
+
+            // Check timeout
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::steady_clock::now() - *startTime
             ).count();
-            
+
             (*attemptCount)++;
-            if (*attemptCount >= 20 || elapsed >= 3) {  // Max 2 seconds or 20 attempts
+            if (*attemptCount >= 20 || elapsed >= 3) {  // Max ~2 seconds or 20 attempts
                 Json::Value root;
                 root["error"] = "pending";
                 root["message"] = "Query enqueued; try again with the same nonce";
@@ -622,16 +589,16 @@ namespace {
                 (*sharedCallback)(resp);
                 return;
             }
-            
-            // Use weak_ptr to avoid circular reference
+
+            // Continue polling
             if (auto pollFunc = pollResultWeak.lock()) {
                 loop->runAfter(0.1, *pollFunc);
             }
         };
-        
+
         // Start polling after 100ms
         loop->runAfter(0.1, *pollResultPtr);
-        
+
     } catch (const std::exception &ex) {
         callback(makeError(std::string("querySmartContract error: ") + ex.what(), k500InternalServerError));
     }

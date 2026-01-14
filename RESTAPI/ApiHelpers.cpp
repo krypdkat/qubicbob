@@ -6,6 +6,7 @@
 #include "shim.h"
 #include "database/db.h"
 #include "structs.h"
+#include "bob.h"
 #include <sstream>
 #include <iomanip>
 #include <cstring>
@@ -321,6 +322,92 @@ BroadcastResult broadcastTransaction(const std::string& signedTxHex) {
 
     result.success = true;
     result.txHash = std::string(hash);
+    return result;
+}
+
+// ============================================================================
+// Smart Contract Query Functions
+// ============================================================================
+
+// Helper to validate and parse hex input
+static bool parseHexInput(const std::string& inputDataHex, std::vector<uint8_t>& dataBytes, std::string& error) {
+    std::string hex = inputDataHex;
+
+    // Strip 0x prefix if present
+    if (hex.size() >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) {
+        hex = hex.substr(2);
+    }
+
+    // Validate hex length is even
+    if (hex.size() % 2 != 0) {
+        error = "Data hex length must be even";
+        return false;
+    }
+
+    // Validate all characters are hex
+    for (char c : hex) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            error = "Data must be a valid hex string";
+            return false;
+        }
+    }
+
+    // Convert hex to bytes
+    dataBytes.reserve(hex.length() / 2);
+    for (size_t i = 0; i < hex.length(); i += 2) {
+        uint8_t byte = static_cast<uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16));
+        dataBytes.push_back(byte);
+    }
+
+    return true;
+}
+
+SmartContractQueryResult checkSmartContractResult(uint32_t nonce) {
+    SmartContractQueryResult result;
+    result.nonce = nonce;
+
+    std::vector<uint8_t> out;
+    if (responseSCData.get(nonce, out)) {
+        result.success = true;
+        result.data = bytesToHex(out.data(), out.size());
+    } else {
+        result.pending = true;
+    }
+
+    return result;
+}
+
+SmartContractQueryResult querySmartContract(uint32_t nonce, uint32_t scIndex,
+                                             uint32_t funcNumber, const std::string& inputDataHex) {
+    SmartContractQueryResult result;
+    result.nonce = nonce;
+
+    // Check if Bob has any connections
+    if (gNumBMConnection == 0) {
+        result.error = "Bob has no connection to any BM";
+        return result;
+    }
+
+    // Check cache first
+    std::vector<uint8_t> out;
+    if (responseSCData.get(nonce, out)) {
+        result.success = true;
+        result.data = bytesToHex(out.data(), out.size());
+        return result;
+    }
+
+    // Parse input data
+    std::vector<uint8_t> dataBytes;
+    if (!parseHexInput(inputDataHex, dataBytes, result.error)) {
+        return result;
+    }
+
+    // Enqueue the request
+    enqueueSmartContractRequest(nonce, scIndex, funcNumber, dataBytes.data(),
+                                 static_cast<uint32_t>(dataBytes.size()));
+
+    // Return pending status
+    result.pending = true;
     return result;
 }
 

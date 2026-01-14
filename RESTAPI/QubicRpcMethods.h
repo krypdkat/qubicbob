@@ -154,6 +154,19 @@ public:
     static Json::Value getAllAssetTransfers(const Json::Value& filterParams);
 
     // ========================================================================
+    // Smart Contract Methods
+    // ========================================================================
+
+    // qubic_querySmartContract - Query a smart contract function
+    // @param params: JSON object with fields:
+    //   - nonce: unique identifier for the query (required, uint32)
+    //   - scIndex: smart contract index (required, uint32)
+    //   - funcNumber: function number to call (required, uint32)
+    //   - data: hex-encoded input data (required, with or without 0x prefix)
+    // Returns: { "nonce": ..., "data": "..." } or { "pending": true, "nonce": ..., "message": "..." }
+    static Json::Value querySmartContract(const Json::Value& params);
+
+    // ========================================================================
     // Subscription Methods (WebSocket only)
     // ========================================================================
 
