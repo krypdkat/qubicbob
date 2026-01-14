@@ -362,14 +362,6 @@ int runBob(int argc, char *argv[])
         Logger::get()->info("Exited verifyLoggingEvent thread");
     }
 
-    if (gIsEndEpoch)
-    {
-        // exit all requesters
-        // serve slower nodes 30 more minutes before officially switching epoch
-        Logger::get()->info("Received END_EPOCH message. Serving 30 minutes and then closing BOB");
-        SLEEP(1000ULL * 60 * 30); // 30 minutes
-    }
-
     // Now the receivers can drain and exit.
     for (auto& thr : v_recv_thread) thr.join();
     Logger::get()->info("Exited recv threads");

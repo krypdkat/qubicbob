@@ -295,7 +295,6 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
         {
             // the final thread in bob 4-processors model
             Logger::get()->info("Finish indexing last tick. Exiting...");
-            stopFlag = true;
             break;
         }
         if (nextTick >= gCurrentVerifyLoggingTick && !stopFlag.load(std::memory_order_relaxed))
