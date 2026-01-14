@@ -782,6 +782,8 @@ std::string QubicRpcMethods::subscribe(
     }
     else if (subscriptionType == "logs") {
         LogFilter filter;
+        std::optional<int64_t> startLogId;
+        std::optional<uint16_t> startEpoch;
 
         if (filterParams.isObject()) {
             if (filterParams.isMember("identity")) {
@@ -809,31 +811,71 @@ std::string QubicRpcMethods::subscribe(
                     filter.logTypes.push_back(filterParams["logType"].asUInt());
                 }
             }
+
+            // Parse catch-up parameters
+            if (filterParams.isMember("startLogId") && filterParams["startLogId"].isNumeric()) {
+                startLogId = filterParams["startLogId"].asInt64();
+                filter.startLogId = startLogId;
+            }
+            if (filterParams.isMember("startEpoch") && filterParams["startEpoch"].isNumeric()) {
+                startEpoch = static_cast<uint16_t>(filterParams["startEpoch"].asUInt());
+                filter.startEpoch = startEpoch;
+            }
         }
 
-        return manager.subscribe(conn, QubicSubscriptionType::Logs, filter);
+        std::string subId = manager.subscribe(conn, QubicSubscriptionType::Logs, filter);
+
+        // If startLogId specified, trigger catch-up
+        if (!subId.empty() && startLogId.has_value()) {
+            uint16_t epoch = startEpoch.value_or(gCurrentProcessingEpoch.load());
+            manager.performLogsCatchUp(conn, subId, epoch, startLogId.value());
+        }
+
+        return subId;
     }
     else if (subscriptionType == "transfers") {
         LogFilter filter;
         filter.logTypes.push_back(QU_TRANSFER);
+        std::optional<int64_t> startLogId;
+        std::optional<uint16_t> startEpoch;
 
-        if (filterParams.isObject() && filterParams.isMember("identity")) {
-            if (filterParams["identity"].isArray()) {
-                for (const auto& id : filterParams["identity"]) {
-                    std::string normalized = normalizeIdentity(id.asString());
+        if (filterParams.isObject()) {
+            if (filterParams.isMember("identity")) {
+                if (filterParams["identity"].isArray()) {
+                    for (const auto& id : filterParams["identity"]) {
+                        std::string normalized = normalizeIdentity(id.asString());
+                        if (!normalized.empty()) {
+                            filter.identities.push_back(normalized);
+                        }
+                    }
+                } else if (filterParams["identity"].isString()) {
+                    std::string normalized = normalizeIdentity(filterParams["identity"].asString());
                     if (!normalized.empty()) {
                         filter.identities.push_back(normalized);
                     }
                 }
-            } else if (filterParams["identity"].isString()) {
-                std::string normalized = normalizeIdentity(filterParams["identity"].asString());
-                if (!normalized.empty()) {
-                    filter.identities.push_back(normalized);
-                }
+            }
+
+            // Parse catch-up parameters
+            if (filterParams.isMember("startLogId") && filterParams["startLogId"].isNumeric()) {
+                startLogId = filterParams["startLogId"].asInt64();
+                filter.startLogId = startLogId;
+            }
+            if (filterParams.isMember("startEpoch") && filterParams["startEpoch"].isNumeric()) {
+                startEpoch = static_cast<uint16_t>(filterParams["startEpoch"].asUInt());
+                filter.startEpoch = startEpoch;
             }
         }
 
-        return manager.subscribe(conn, QubicSubscriptionType::Transfers, filter);
+        std::string subId = manager.subscribe(conn, QubicSubscriptionType::Transfers, filter);
+
+        // If startLogId specified, trigger catch-up
+        if (!subId.empty() && startLogId.has_value()) {
+            uint16_t epoch = startEpoch.value_or(gCurrentProcessingEpoch.load());
+            manager.performLogsCatchUp(conn, subId, epoch, startLogId.value());
+        }
+
+        return subId;
     }
     else if (subscriptionType == "tickStream") {
         TickStreamFilter filter;

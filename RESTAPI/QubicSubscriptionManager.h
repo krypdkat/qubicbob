@@ -25,6 +25,16 @@ struct LogFilter {
     std::optional<uint32_t> toTick;
     std::vector<std::string> identities;  // Filter by source or destination identity
     std::vector<uint32_t> logTypes;       // Filter by log type
+    // Catch-up parameters
+    std::optional<int64_t> startLogId;    // Start from this log ID for catch-up
+    std::optional<uint16_t> startEpoch;   // Epoch for startLogId (default: current)
+};
+
+// Pending log for catch-up queue
+struct PendingLogEvent {
+    LogEvent log;
+    std::string sourceIdentity;
+    std::string destIdentity;
 };
 
 // Transaction filter for TickStream subscriptions
@@ -81,7 +91,11 @@ struct QubicSubscription {
     drogon::WebSocketConnectionPtr conn;
     uint32_t lastTick{0};                  // Last tick sent (for TickStream)
     bool catchUpInProgress{false};         // True while catch-up is running
-    std::vector<PendingTickData> pendingTicks;  // Ticks queued during catch-up
+    std::vector<PendingTickData> pendingTicks;  // Ticks queued during catch-up (TickStream)
+    // Logs/Transfers catch-up state
+    int64_t lastLogId{-1};                 // Last log ID sent during catch-up
+    uint16_t catchUpEpoch{0};              // Epoch for catch-up
+    std::vector<PendingLogEvent> pendingLogs;  // Logs queued during catch-up
 };
 
 class QubicSubscriptionManager {
@@ -115,6 +129,11 @@ public:
     void performCatchUp(const drogon::WebSocketConnectionPtr& conn,
                         const std::string& subId,
                         uint32_t fromTick, uint32_t toTick);
+
+    // Catch-up for Logs/Transfers subscriptions (logId-based)
+    void performLogsCatchUp(const drogon::WebSocketConnectionPtr& conn,
+                            const std::string& subId,
+                            uint16_t epoch, int64_t fromLogId);
 
     // Get client count for monitoring
     size_t getClientCount() const;

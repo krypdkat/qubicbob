@@ -92,11 +92,19 @@ std::string QubicSubscriptionManager::subscribe(
     sub.filter = filter;
     sub.conn = conn;
 
+    // If startLogId is specified, mark catch-up in progress
+    if (filter.startLogId.has_value()) {
+        sub.catchUpInProgress = true;
+        sub.catchUpEpoch = filter.startEpoch.value_or(gCurrentProcessingEpoch.load());
+        sub.lastLogId = -1;  // Will be set by catch-up thread when queuing starts
+    }
+
     // Store subscription
     subscriptions_[subId] = sub;
     clientIt->second.insert(subId);
 
-    Logger::get()->debug("Qubic subscription created: {} type={}", subId, static_cast<int>(type));
+    Logger::get()->debug("Qubic subscription created: {} type={} catchUp={}",
+                        subId, static_cast<int>(type), sub.catchUpInProgress);
 
     return subId;
 }
@@ -183,6 +191,7 @@ void QubicSubscriptionManager::onNewLogs(uint32_t tick, const std::vector<LogEve
     if (logs.empty()) return;
 
     std::vector<std::pair<drogon::WebSocketConnectionPtr, std::pair<std::string, Json::Value>>> pendingSends;
+    std::vector<std::tuple<std::string, LogEvent, std::string, std::string>> pendingQueues;
 
     {
         std::shared_lock lock(mutex_);
@@ -227,9 +236,33 @@ void QubicSubscriptionManager::onNewLogs(uint32_t tick, const std::vector<LogEve
                 if (sub.type == QubicSubscriptionType::Logs ||
                     sub.type == QubicSubscriptionType::Transfers) {
                     if (matchesFilter(log, sub.filter, sourceIdentity, destIdentity)) {
-                        pendingSends.emplace_back(sub.conn, std::make_pair(subId, qubicLog));
+                        // Check if catch-up is in progress and we're in queue mode
+                        if (sub.catchUpInProgress && sub.lastLogId >= 0) {
+                            // Queue for later delivery
+                            pendingQueues.emplace_back(subId, log, sourceIdentity, destIdentity);
+                        } else if (!sub.catchUpInProgress) {
+                            // Send immediately (no catch-up or catch-up complete)
+                            pendingSends.emplace_back(sub.conn, std::make_pair(subId, qubicLog));
+                        }
+                        // If catchUpInProgress but lastLogId < 0, we're not yet in queue mode
+                        // (still too far behind), so we skip this log
                     }
                 }
+            }
+        }
+    }
+
+    // Queue logs for catch-up subscriptions (needs unique_lock)
+    if (!pendingQueues.empty()) {
+        std::unique_lock lock(mutex_);
+        for (const auto& [subId, log, srcId, dstId] : pendingQueues) {
+            auto it = subscriptions_.find(subId);
+            if (it != subscriptions_.end() && it->second.catchUpInProgress && it->second.lastLogId >= 0) {
+                PendingLogEvent pending;
+                pending.log = log;
+                pending.sourceIdentity = srcId;
+                pending.destIdentity = dstId;
+                it->second.pendingLogs.push_back(pending);
             }
         }
     }
@@ -1091,6 +1124,258 @@ void QubicSubscriptionManager::performCatchUp(
                 it->second.catchUpInProgress = false;
                 it->second.pendingTicks.clear();
                 Logger::get()->info("TickStream catch-up {} complete", subId);
+            }
+        }
+    }).detach();
+}
+
+void QubicSubscriptionManager::performLogsCatchUp(
+    const drogon::WebSocketConnectionPtr& conn,
+    const std::string& subId,
+    uint16_t epoch, int64_t fromLogId)
+{
+    // Run catch-up in a separate thread to avoid blocking
+    activeCatchUpThreads_.fetch_add(1);
+    std::thread([this, conn, subId, epoch, fromLogId]() {
+        // RAII guard to decrement thread count on exit
+        struct ThreadGuard {
+            std::atomic<int>& counter;
+            ~ThreadGuard() { counter.fetch_sub(1); }
+        } guard{activeCatchUpThreads_};
+
+        Logger::get()->info("Starting Logs catch-up {} from epoch {} logId {}", subId, epoch, fromLogId);
+
+        const int64_t BATCH_SIZE = 1000;  // Fetch 1000 logs at a time
+        const int64_t QUEUE_THRESHOLD = 10000;  // Start queuing when within this range
+
+        int64_t currentLogId = fromLogId;
+        TickData td{0};
+        LogRangesPerTxInTick lr{-1};
+        std::vector<int> logTxOrder;
+
+        while (true) {
+            // Check if shutdown is requested
+            if (stopFlag_.load()) {
+                Logger::get()->debug("Logs catch-up {} aborted: shutdown requested", subId);
+                return;
+            }
+
+            // Check if connection is still valid
+            if (!conn->connected()) {
+                Logger::get()->debug("Logs catch-up {} aborted: connection closed", subId);
+                break;
+            }
+
+            // Check if subscription still exists and get filter
+            LogFilter filter;
+            QubicSubscriptionType subType;
+            {
+                std::shared_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it == subscriptions_.end()) {
+                    Logger::get()->debug("Logs catch-up {} aborted: subscription removed", subId);
+                    return;
+                }
+                filter = it->second.filter;
+                subType = it->second.type;
+            }
+
+            // Get current latest log ID
+            int64_t latestLogId = db_get_latest_log_id(epoch);
+            if (latestLogId < 0) {
+                // No logs yet, wait and retry
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+
+            // Check if we're within the queue threshold
+            int64_t remaining = latestLogId - currentLogId;
+            if (remaining <= QUEUE_THRESHOLD) {
+                // Start queuing real-time logs and continue catch-up
+                {
+                    std::unique_lock lock(mutex_);
+                    auto it = subscriptions_.find(subId);
+                    if (it != subscriptions_.end()) {
+                        it->second.lastLogId = currentLogId;
+                        // catchUpInProgress stays true, but now logs will be queued
+                    }
+                }
+                Logger::get()->debug("Logs catch-up {} entering queue mode at logId {} (remaining: {})",
+                                    subId, currentLogId, remaining);
+            }
+
+            // Determine batch end
+            int64_t batchEnd = std::min(currentLogId + BATCH_SIZE - 1, latestLogId);
+
+            // Fetch logs in batch
+            for (int64_t logId = currentLogId; logId <= batchEnd; ++logId) {
+                // Check for abort conditions periodically
+                if (logId % 100 == 0) {
+                    if (stopFlag_.load() || !conn->connected()) {
+                        break;
+                    }
+                    std::shared_lock lock(mutex_);
+                    if (subscriptions_.find(subId) == subscriptions_.end()) {
+                        break;
+                    }
+                }
+
+                LogEvent log;
+                if (!db_try_get_log(epoch, static_cast<uint64_t>(logId), log)) {
+                    // Log not found, skip
+                    continue;
+                }
+
+                // Get tick data if needed
+                if (log.getTick() != td.tick || log.getEpoch() != td.epoch) {
+                    db_try_get_tick_data(log.getTick(), td);
+                    db_try_get_log_ranges(log.getTick(), lr);
+                    logTxOrder = lr.sort();
+                }
+
+                // Find transaction index for this log
+                int txIndex = 0;
+                for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
+                    if (lr.fromLogId[i] >= 0 && lr.length[i] > 0) {
+                        if (static_cast<int64_t>(logId) >= lr.fromLogId[i] &&
+                            static_cast<int64_t>(logId) < lr.fromLogId[i] + lr.length[i]) {
+                            txIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                // Convert to Qubic log format
+                Json::Value qubicLog = QubicRpc::logEventToQubicLog(log, td, txIndex, 0);
+
+                // Get source/destination identities for filtering
+                std::string sourceIdentity;
+                std::string destIdentity;
+                if (qubicLog.isMember("source")) {
+                    sourceIdentity = qubicLog["source"].asString();
+                }
+                if (qubicLog.isMember("destination")) {
+                    destIdentity = qubicLog["destination"].asString();
+                }
+
+                // Check if log matches filter
+                if (!matchesFilter(log, filter, sourceIdentity, destIdentity)) {
+                    continue;
+                }
+
+                // Add isCatchUp field
+                qubicLog["isCatchUp"] = true;
+
+                // Send the log
+                try {
+                    sendSubscriptionMessage(conn, subId, qubicLog);
+                } catch (const std::exception& e) {
+                    Logger::get()->warn("Failed to send catch-up log: {}", e.what());
+                    break;
+                }
+
+                // Small delay to avoid overwhelming the client
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+
+            // Update current position
+            currentLogId = batchEnd + 1;
+
+            // Check if we've caught up
+            if (currentLogId > latestLogId) {
+                break;
+            }
+
+            // Small delay between batches
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        // Drain pending logs that arrived during catch-up
+        while (true) {
+            if (stopFlag_.load()) {
+                Logger::get()->debug("Logs catch-up {} pending drain aborted: shutdown", subId);
+                return;
+            }
+
+            if (!conn->connected()) {
+                Logger::get()->debug("Logs catch-up {} pending drain aborted: connection closed", subId);
+                break;
+            }
+
+            // Get next pending log (if any) and filter config
+            std::optional<PendingLogEvent> pendingLog;
+            LogFilter filter;
+            {
+                std::unique_lock lock(mutex_);
+                auto it = subscriptions_.find(subId);
+                if (it == subscriptions_.end()) {
+                    return;
+                }
+                if (!it->second.pendingLogs.empty()) {
+                    pendingLog = it->second.pendingLogs.front();
+                    it->second.pendingLogs.erase(it->second.pendingLogs.begin());
+                    filter = it->second.filter;
+                } else {
+                    // No more pending logs, mark catch-up complete
+                    it->second.catchUpInProgress = false;
+                    it->second.lastLogId = -1;
+                    Logger::get()->info("Logs catch-up {} complete", subId);
+                    return;
+                }
+            }
+
+            if (!pendingLog) {
+                continue;
+            }
+
+            // Check if log matches filter
+            if (!matchesFilter(pendingLog->log, filter,
+                              pendingLog->sourceIdentity, pendingLog->destIdentity)) {
+                continue;
+            }
+
+            // Get tick data for the log
+            TickData pendingTd{0};
+            LogRangesPerTxInTick pendingLr{-1};
+            db_try_get_tick_data(pendingLog->log.getTick(), pendingTd);
+            db_try_get_log_ranges(pendingLog->log.getTick(), pendingLr);
+
+            // Find transaction index
+            int txIndex = 0;
+            int64_t logId = pendingLog->log.getLogId();
+            for (int i = 0; i < LOG_TX_PER_TICK; ++i) {
+                if (pendingLr.fromLogId[i] >= 0 && pendingLr.length[i] > 0) {
+                    if (logId >= pendingLr.fromLogId[i] &&
+                        logId < pendingLr.fromLogId[i] + pendingLr.length[i]) {
+                        txIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // Convert to Qubic log format
+            Json::Value qubicLog = QubicRpc::logEventToQubicLog(pendingLog->log, pendingTd, txIndex, 0);
+            // No isCatchUp field for real-time logs
+
+            try {
+                sendSubscriptionMessage(conn, subId, qubicLog);
+            } catch (const std::exception& e) {
+                Logger::get()->warn("Failed to send pending log: {}", e.what());
+                break;
+            }
+
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+
+        // Final cleanup
+        {
+            std::unique_lock lock(mutex_);
+            auto it = subscriptions_.find(subId);
+            if (it != subscriptions_.end() && it->second.catchUpInProgress) {
+                it->second.catchUpInProgress = false;
+                it->second.pendingLogs.clear();
+                it->second.lastLogId = -1;
+                Logger::get()->info("Logs catch-up {} complete", subId);
             }
         }
     }).detach();
