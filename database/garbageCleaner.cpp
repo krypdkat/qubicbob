@@ -87,6 +87,14 @@ bool cleanTransactionLogs(uint32_t tick)
         Logger::get()->error("Failed to get log range for this tick {} - epoch {}", td.tick, td.epoch);
         return false;
     }
+    // Save log ranges to kvrocks before deleting from Redis
+    // This ensures log ranges remain available for transaction execution lookups
+    db_insert_cLogRange_to_kvrocks(tick, lr);
+    long long log_start, log_len;
+    if (db_try_get_log_range_for_tick(tick, log_start, log_len))
+    {
+        db_insert_TickLogRange_to_kvrocks(tick, log_start, log_len);
+    }
     db_delete_log_ranges(tick);
     return cleanTransactionAndLogsAndSaveToDisk(td, lr);
 }

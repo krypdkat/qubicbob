@@ -5,6 +5,7 @@
 #include "Entity.h"
 #include "database/db.h"
 #include "Asset.h"
+#include "ApiHelpers.h"
 #include <json/json.h>
 #include <vector>
 #include <sstream>
@@ -45,45 +46,38 @@ bool enqueueSmartContractRequest(uint32_t nonce, uint32_t scIndex, uint32_t func
 std::string bobGetBalance(const char* identity)
 {
     if (!identity) return "{\"error\": \"Wrong identity format\"}";
-    std::string str(identity);
-    if (str.size() < 60) return "{\"error\": \"Wrong identity format\"}";
 
-    m256i pk{};
-    getPublicKeyFromIdentity(str.data(), pk.m256i_u8);
-    int index = spectrumIndex(pk);
-    if (index < 0) return "{\"error\": \"Wrong identity format\"}";
+    auto info = ApiHelpers::getBalanceInfo(identity);
 
-    const auto& e = spectrum[index];
+    if (!info.found) {
+        return "{\"error\": \"" + info.error + "\"}";
+    }
+
     std::string error = "null";
-    if (e.numberOfIncomingTransfers > gCurrentVerifyLoggingTick - 1 || e.numberOfOutgoingTransfers > gCurrentVerifyLoggingTick - 1)
-    {
+    if (info.isBeingProcessed) {
         error = "This entity is being processed. currentBobTick is smaller than latestIncomingTransferTick/latestOutgoingTransferTick";
     }
+
     return std::string("{") +
-           "\"incomingAmount\":" + std::to_string(e.incomingAmount) +
-            ",\"outgoingAmount\":" + std::to_string(e.outgoingAmount) +
-            ",\"balance\":" + std::to_string(e.incomingAmount - e.outgoingAmount) +
-           ",\"numberOfIncomingTransfers\":" + std::to_string(e.numberOfIncomingTransfers) +
-           ",\"numberOfOutgoingTransfers\":" + std::to_string(e.numberOfOutgoingTransfers) +
-           ",\"latestIncomingTransferTick\":" + std::to_string(e.latestIncomingTransferTick) +
-           ",\"latestOutgoingTransferTick\":" + std::to_string(e.latestOutgoingTransferTick) +
-            ",\"currentBobTick:\":" + std::to_string(gCurrentVerifyLoggingTick - 1) +
-            ",\"error:\":\"" + error + +"\""
+           "\"incomingAmount\":" + std::to_string(info.incomingAmount) +
+           ",\"outgoingAmount\":" + std::to_string(info.outgoingAmount) +
+           ",\"balance\":" + std::to_string(info.balance) +
+           ",\"numberOfIncomingTransfers\":" + std::to_string(info.numberOfIncomingTransfers) +
+           ",\"numberOfOutgoingTransfers\":" + std::to_string(info.numberOfOutgoingTransfers) +
+           ",\"latestIncomingTransferTick\":" + std::to_string(info.latestIncomingTransferTick) +
+           ",\"latestOutgoingTransferTick\":" + std::to_string(info.latestOutgoingTransferTick) +
+           ",\"currentBobTick:\":" + std::to_string(info.currentTick) +
+           ",\"error:\":\"" + error + "\""
            "}";
 }
 
 std::string bobGetAsset(const std::string identity, const std::string assetName, const std::string assetIssuer, uint32_t manageSCIndex)
 {
-    m256i pk, issuer;
-    uint64_t asset_name = 0;
-    getPublicKeyFromIdentity(identity.c_str(), pk.m256i_u8);
-    getPublicKeyFromIdentity(assetIssuer.c_str(), issuer.m256i_u8);
-    memcpy(&asset_name, assetName.data(), std::min(7, int(assetName.size())));
-    long long ownershipBalance, possessionBalance;
-    getAssetBalances(pk, issuer, asset_name, manageSCIndex, ownershipBalance, possessionBalance);
+    auto info = ApiHelpers::getAssetBalanceInfo(identity, assetIssuer, assetName, manageSCIndex);
+
     Json::Value root;
-    root["ownershipBalance"] = Json::Int64(ownershipBalance);
-    root["possessionBalance"] = Json::Int64(possessionBalance);
+    root["ownershipBalance"] = Json::Int64(info.ownershipBalance);
+    root["possessionBalance"] = Json::Int64(info.possessionBalance);
     Json::FastWriter writer;
     return writer.write(root);
 }
@@ -93,58 +87,40 @@ std::string bobGetTransaction(const char* txHash)
     if (!txHash) return "{\"error\": \"Invalid transaction hash\"}";
 
     try {
-        std::vector<uint8_t> txData;
-        if (!db_try_get_transaction(txHash, txData)) {
-            return "{\"error\": \"Transaction not found\"}";
+        auto info = ApiHelpers::getTransactionInfo(txHash);
+
+        if (!info.found) {
+            return "{\"error\": \"" + info.error + "\"}";
         }
-        Transaction *tx = reinterpret_cast<Transaction *>(txData.data());
-        if (!tx) {
-            return "{\"error\": \"Invalid transaction data\"}";
-        }
-        std::string inputData = "";
-        if (tx->inputSize)
-        {
-            const uint8_t *input = txData.data() + sizeof(Transaction);
-            std::stringstream ss;
-            ss << std::hex << std::setfill('0');
-            for (size_t i = 0; i < tx->inputSize; ++i) {
-                ss << std::setw(2) << static_cast<int>(input[i]);
-            }
-            inputData = ss.str();
-        }
-        int tx_index;
-        long long from_log_id;
-        long long to_log_id;
-        uint64_t timestamp;
-        bool executed;
-        if (!db_get_indexed_tx(txHash, tx_index, from_log_id, to_log_id, timestamp, executed)) {
+
+        if (!info.hasIndexedInfo) {
             return std::string("{") +
-                   "\"hash\":\"" + txHash + "\"," +
-                   "\"from\":\"" + getIdentity(tx->sourcePublicKey, false) + "\"," +
-                   "\"to\":\"" + getIdentity(tx->destinationPublicKey, false) + "\"," +
-                   "\"amount\":" + std::to_string(tx->amount) + "," +
-                   "\"tick\":" + std::to_string(tx->tick) + "," +
-                    "\"inputSize\":" + std::to_string(tx->inputSize) + "," +
-                    "\"inputType\":" + std::to_string(tx->inputType) + "," +
-                    "\"inputData\":\"" + inputData + "\"" +
-                    "}";
+                   "\"hash\":\"" + info.hash + "\"," +
+                   "\"from\":\"" + info.from + "\"," +
+                   "\"to\":\"" + info.to + "\"," +
+                   "\"amount\":" + std::to_string(info.amount) + "," +
+                   "\"tick\":" + std::to_string(info.tick) + "," +
+                   "\"inputSize\":" + std::to_string(info.inputSize) + "," +
+                   "\"inputType\":" + std::to_string(info.inputType) + "," +
+                   "\"inputData\":\"" + info.inputData + "\"" +
+                   "}";
         }
 
         return std::string("{") +
-               "\"hash\":\"" + txHash + "\"," +
-               "\"from\":\"" + getIdentity(tx->sourcePublicKey, false) + "\"," +
-               "\"to\":\"" + getIdentity(tx->destinationPublicKey, false) + "\"," +
-               "\"amount\":" + std::to_string(tx->amount) + "," +
-               "\"tick\":" + std::to_string(tx->tick) + "," +
-                "\"logIdFrom\":" + std::to_string(from_log_id) + "," +
-                "\"logIdTo\":" + std::to_string(to_log_id) + "," +
-                "\"transactionIndex\":" + std::to_string(tx_index) + "," +
-                "\"executed\":" + (executed ? "true" : "false") + "," +
-                "\"timestamp\":" + std::to_string(timestamp) + "," +
-                "\"inputSize\":" + std::to_string(tx->inputSize) + "," +
-                "\"inputType\":" + std::to_string(tx->inputType) + "," +
-                "\"inputData\":\"" + inputData + "\"" +
-                "}";
+               "\"hash\":\"" + info.hash + "\"," +
+               "\"from\":\"" + info.from + "\"," +
+               "\"to\":\"" + info.to + "\"," +
+               "\"amount\":" + std::to_string(info.amount) + "," +
+               "\"tick\":" + std::to_string(info.tick) + "," +
+               "\"logIdFrom\":" + std::to_string(info.logIdFrom) + "," +
+               "\"logIdTo\":" + std::to_string(info.logIdTo) + "," +
+               "\"transactionIndex\":" + std::to_string(info.transactionIndex) + "," +
+               "\"executed\":" + (info.executed ? "true" : "false") + "," +
+               "\"timestamp\":" + std::to_string(info.timestamp) + "," +
+               "\"inputSize\":" + std::to_string(info.inputSize) + "," +
+               "\"inputType\":" + std::to_string(info.inputType) + "," +
+               "\"inputData\":\"" + info.inputData + "\"" +
+               "}";
     } catch (const std::exception &e) {
         return std::string("{\"error\": \"") + e.what() + "\"}";
     }
@@ -535,16 +511,18 @@ std::string bobGetExtraStatus()
 
 std::string bobGetStatus()
 {
+    auto status = ApiHelpers::getSyncStatus();
+
     return std::string("{") +
-           "\"currentProcessingEpoch\":" + std::to_string(gCurrentProcessingEpoch) +
-           ",\"currentFetchingTick\":" + std::to_string(gCurrentFetchingTick) +
-           ",\"currentFetchingLogTick\":" + std::to_string(gCurrentFetchingLogTick) +
-           ",\"currentVerifyLoggingTick\":" + std::to_string(gCurrentVerifyLoggingTick) +
-           ",\"currentIndexingTick\":" + std::to_string(gCurrentIndexingTick) +
-            ",\"initialTick\":" + std::to_string(gInitialTick) +
-            R"(,"bobVersion": ")" + BOB_VERSION + "\""
-            ",\"bobVersionGitHash\": \"" + GIT_COMMIT_HASH + "\""
-            ",\"bobCompiler\": \"" + COMPILER_NAME + "\""
+           "\"currentProcessingEpoch\":" + std::to_string(status.epoch) +
+           ",\"currentFetchingTick\":" + std::to_string(status.currentFetchingTick) +
+           ",\"currentFetchingLogTick\":" + std::to_string(status.currentFetchingLogTick) +
+           ",\"currentVerifyLoggingTick\":" + std::to_string(status.currentVerifyLoggingTick) +
+           ",\"currentIndexingTick\":" + std::to_string(status.currentIndexingTick) +
+           ",\"initialTick\":" + std::to_string(status.initialTick) +
+           R"(,"bobVersion": ")" + BOB_VERSION + "\""
+           ",\"bobVersionGitHash\": \"" + GIT_COMMIT_HASH + "\""
+           ",\"bobCompiler\": \"" + COMPILER_NAME + "\""
             ",\"extraInfo\": " + bobGetExtraStatus() +
            "}";
 }
@@ -594,23 +572,15 @@ std::string broadcastTransaction(uint8_t* txDataWithHeader, int size)
 
 std::string bobGetEpochInfo(uint16_t epoch)
 {
-    Json::Value root;
-    uint32_t end_epoch_tick = 0;
-    auto es = std::to_string(epoch);
-    long long length = -1, start = -1;
-    uint32_t initTick = 0;
-    uint32_t lastIndexedTick = 0;
-    db_get_u32("end_epoch_tick:" + es, end_epoch_tick);
-    db_get_end_epoch_log_range(epoch, start, length);
-    db_get_u32("init_tick:"+std::to_string(epoch), initTick);
-    db_get_u32("lastIndexedTick:"+std::to_string(epoch), lastIndexedTick);
+    auto info = ApiHelpers::getEpochInfo(epoch);
 
-    root["epoch"] = epoch;
-    root["initialTick"] = initTick;
-    root["endTick"] = end_epoch_tick;
-    root["endTickStartLogId"] = Json::Int64(start);
-    root["endTickEndLogId"] = Json::Int64(start + length - 1);
-    root["lastIndexedTick"] = Json::Int64(lastIndexedTick);
+    Json::Value root;
+    root["epoch"] = info.epoch;
+    root["initialTick"] = info.initialTick;
+    root["endTick"] = info.endTick;
+    root["endTickStartLogId"] = Json::Int64(info.endTickStartLogId);
+    root["endTickEndLogId"] = Json::Int64(info.endTickEndLogId);
+    root["lastIndexedTick"] = Json::Int64(info.lastIndexedTick);
     Json::FastWriter writer;
     return writer.write(root);
 }

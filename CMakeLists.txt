@@ -143,10 +143,16 @@ SET(FILES
 		${CMAKE_SOURCE_DIR}/GlobalVar.cpp
 		${CMAKE_SOURCE_DIR}/LogEvent.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/bobAPI.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/ApiHelpers.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/querySmartContract.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/RESTServer.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/LogSubscriptionManager.cpp
 		${CMAKE_SOURCE_DIR}/RESTAPI/LogWebSocket.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMapper.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcWebSocket.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcMethods.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicSubscriptionManager.cpp
+		${CMAKE_SOURCE_DIR}/RESTAPI/QubicRpcHandler.cpp
 )
 
 add_library(XKCP_avx2 STATIC XKCP/KangarooTwelve.c

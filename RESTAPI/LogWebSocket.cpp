@@ -8,7 +8,20 @@
 
 void LogWebSocket::handleNewConnection(const drogon::HttpRequestPtr& req,
                                        const drogon::WebSocketConnectionPtr& wsConnPtr) {
-    Logger::get()->info("WebSocket connection established from {}", req->getPeerAddr().toIpPort());
+    // Reject connections until bootstrap is complete
+    if (gCurrentVerifyLoggingTick.load() <= gInitialTick.load()) {
+        Logger::get()->debug("Log WebSocket connection rejected (bootstrap in progress) from {}",
+                            req->getPeerAddr().toIpPort());
+        Json::Value error;
+        error["type"] = "error";
+        error["message"] = "Server is starting up, please try again later";
+        Json::FastWriter writer;
+        wsConnPtr->send(writer.write(error));
+        wsConnPtr->shutdown();
+        return;
+    }
+
+    Logger::get()->debug("WebSocket connection established from {}", req->getPeerAddr().toIpPort());
 
     // Add client to subscription manager
     LogSubscriptionManager::instance().addClient(wsConnPtr);
@@ -24,7 +37,7 @@ void LogWebSocket::handleNewConnection(const drogon::HttpRequestPtr& req,
 }
 
 void LogWebSocket::handleConnectionClosed(const drogon::WebSocketConnectionPtr& wsConnPtr) {
-    Logger::get()->info("WebSocket connection closed");
+    Logger::get()->debug("WebSocket connection closed");
 
     // Remove client from subscription manager
     LogSubscriptionManager::instance().removeClient(wsConnPtr);

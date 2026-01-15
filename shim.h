@@ -15,6 +15,8 @@
 #define gCurrentFetchingLogTick   (GS().gCurrentLoggingEventTick)
 #define gCurrentVerifyLoggingTick  (GS().gCurrentVerifyLoggingTick)
 #define gCurrentIndexingTick       (GS().gCurrentIndexingTick)
+#define gLastSeenNetworkTick        (GS().gLastSeenNetworkTick)
+#define gReindexFromTick           (GS().gReindexFromTick)
 #define computorsList              (GS().computorsList)
 
 #define spectrum                   ((EntityRecord*)GS().spectrum)
@@ -50,6 +52,7 @@
 #define gKvrocksTTL (GS().gKvrocksTTL)
 
 #define gRpcPort (GS().gRpcPort)
+#define gEnableAdminEndpoints (GS().gEnableAdminEndpoints)
 #define gAllowReceiveLogFromIncomingConnection (GS().gAllowReceiveLogFromIncomingConnection)
 #define gExitDataThreadCounter (GS().gExitDataThreadCounter)
 #define gStartTimeUnix (GS().startTimeUnix)

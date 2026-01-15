@@ -1,4 +1,5 @@
 #include "LogSubscriptionManager.h"
+#include "QubicSubscriptionManager.h"
 #include "database/db.h"
 #include "Logger.h"
 #include "shim.h"
@@ -25,7 +26,7 @@ void LogSubscriptionManager::addClient(const drogon::WebSocketConnectionPtr& con
 
     clients_[conn] = std::move(state);
 
-    Logger::get()->info("WebSocket client connected. Total clients: {}", clients_.size());
+    Logger::get()->debug("WebSocket client connected. Total clients: {}", clients_.size());
 }
 
 void LogSubscriptionManager::removeClient(const drogon::WebSocketConnectionPtr& conn) {
@@ -47,7 +48,7 @@ void LogSubscriptionManager::removeClient(const drogon::WebSocketConnectionPtr& 
 
     clients_.erase(it);
 
-    Logger::get()->info("WebSocket client disconnected. Total clients: {}", clients_.size());
+    Logger::get()->debug("WebSocket client disconnected. Total clients: {}", clients_.size());
 }
 
 void LogSubscriptionManager::setClientLastTick(const drogon::WebSocketConnectionPtr& conn, uint32_t lastTick) {
@@ -189,6 +190,11 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         Logger::get()->warn("LogSubscriptionManager: Trying to get deleted tick data");
     }
+    else
+    {
+        // Notify Qubic subscription manager of new tick (for newTicks subscriptions)
+        QubicSubscriptionManager::instance().onNewTick(tick, td);
+    }
 
     if (!db_try_get_log_ranges(tick, lr))
     {
@@ -213,9 +219,9 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
     {
         std::shared_lock lock(mutex_);
 
-        if (clients_.empty() || subscriptionIndex_.empty()) return;
-
-        for (const auto& log : logs) {
+        // Only process for LogSubscriptionManager clients if there are any
+        if (!clients_.empty() && !subscriptionIndex_.empty()) {
+            for (const auto& log : logs) {
             SubscriptionKey key;
             if (!extractSubscriptionKey(log, key)) continue;
             auto logId = log.getLogId();
@@ -295,7 +301,8 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
                 }
                 pendingSends.emplace_back(conn, jsonStr);
             }
-        }
+            }
+        }  // end if (!clients_.empty() && !subscriptionIndex_.empty())
     }
 
     // Dispatch sends asynchronously via Drogon's event loop
@@ -315,6 +322,14 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
             });
         }
     }
+
+    // Notify Qubic subscription manager of new logs (for logs subscriptions)
+    if (!logs.empty() && td.tick != 0) {
+        QubicSubscriptionManager::instance().onNewLogs(tick, logs, td);
+    }
+
+    // Note: tickStream subscriptions are notified from QubicIndexer after indexing
+    // completes, so that transaction execution info (executed, logIdFrom) is available
 }
 
 void LogSubscriptionManager::performCatchUp(const drogon::WebSocketConnectionPtr& conn, uint32_t toTick) {

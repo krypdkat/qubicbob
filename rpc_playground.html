@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qubic JSON-RPC Playground</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0 30px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            color: #00d4ff;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #888;
+        }
+
+        .config-section {
+            background: #252540;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .config-section label {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        .config-section input {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #fff;
+            padding: 8px 12px;
+            width: 200px;
+        }
+
+        .config-section input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .status-dot.connected {
+            background: #00ff88;
+        }
+
+        .status-dot.disconnected {
+            background: #ff4444;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            background: #252540;
+            border-radius: 8px;
+            padding: 15px;
+            height: fit-content;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            color: #00d4ff;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        .method-group {
+            margin-bottom: 20px;
+        }
+
+        .method-group h4 {
+            color: #888;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .method-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: #ccc;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            transition: all 0.2s;
+        }
+
+        .method-btn:hover {
+            background: #333355;
+            color: #00d4ff;
+        }
+
+        .method-btn.active {
+            background: #00d4ff22;
+            color: #00d4ff;
+        }
+
+        .method-btn.ws-only {
+            border-left: 2px solid #ff9900;
+        }
+
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: #252540;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #1e1e35;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .panel-header h3 {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+
+        .panel-content {
+            padding: 15px;
+        }
+
+        .method-info {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .method-info h4 {
+            color: #00d4ff;
+            font-family: monospace;
+            margin-bottom: 8px;
+        }
+
+        .method-info p {
+            color: #888;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .params-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .param-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .param-field label {
+            color: #aaa;
+            font-size: 0.8rem;
+        }
+
+        .param-field label span {
+            color: #666;
+            font-style: italic;
+        }
+
+        .param-field input,
+        .param-field textarea,
+        .param-field select {
+            background: #1a1a2e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #fff;
+            padding: 10px 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+        }
+
+        .param-field textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .param-field input:focus,
+        .param-field textarea:focus,
+        .param-field select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        .btn-primary:hover {
+            background: #00b8e0;
+        }
+
+        .btn-secondary {
+            background: #444;
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: #555;
+        }
+
+        .btn-ws {
+            background: #ff9900;
+            color: #1a1a2e;
+        }
+
+        .btn-ws:hover {
+            background: #e68a00;
+        }
+
+        .transport-toggle {
+            display: flex;
+            background: #1a1a2e;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .transport-toggle button {
+            flex: 1;
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .transport-toggle button.active {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        .transport-toggle button.ws-active {
+            background: #ff9900;
+            color: #1a1a2e;
+        }
+
+        .response-panel {
+            flex: 1;
+            min-height: 300px;
+        }
+
+        .response-content {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .response-content.error {
+            color: #ff6b6b;
+        }
+
+        .response-content.success {
+            color: #00ff88;
+        }
+
+        .response-meta {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .json-key {
+            color: #ff79c6;
+        }
+
+        .json-string {
+            color: #f1fa8c;
+        }
+
+        .json-number {
+            color: #bd93f9;
+        }
+
+        .json-boolean {
+            color: #ff9900;
+        }
+
+        .json-null {
+            color: #666;
+        }
+
+        .subscription-panel {
+            background: #252540;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .subscription-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .subscription-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #333;
+        }
+
+        .subscription-item:last-child {
+            border-bottom: none;
+        }
+
+        .subscription-item .sub-id {
+            font-family: monospace;
+            color: #00d4ff;
+            font-size: 0.85rem;
+        }
+
+        .subscription-item .sub-type {
+            color: #888;
+            font-size: 0.8rem;
+        }
+
+        .subscription-item button {
+            background: #ff4444;
+            border: none;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+
+        .events-log {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .event-item {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 5px;
+        }
+
+        .event-item .event-time {
+            color: #666;
+            font-size: 0.75rem;
+        }
+
+        .event-item .event-type {
+            color: #ff9900;
+            margin-left: 10px;
+        }
+
+        .history-panel {
+            margin-top: 15px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .history-item:hover {
+            background: #333355;
+        }
+
+        .history-item .method {
+            font-family: monospace;
+            color: #00d4ff;
+            flex: 1;
+        }
+
+        .history-item .time {
+            color: #666;
+            font-size: 0.75rem;
+        }
+
+        .history-item .status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .history-item .status.success {
+            background: #00ff88;
+        }
+
+        .history-item .status.error {
+            background: #ff4444;
+        }
+
+        .raw-request {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Qubic JSON-RPC Playground</h1>
+            <p>Interactive testing for Qubic RPC methods</p>
+        </header>
+
+        <div class="config-section">
+            <div>
+                <label>Host</label><br>
+                <input type="text" id="rpcHost" value="localhost" placeholder="localhost">
+            </div>
+            <div>
+                <label>Port</label><br>
+                <input type="text" id="rpcPort" value="40420" placeholder="40420">
+            </div>
+            <div>
+                <label>Transport</label><br>
+                <div class="transport-toggle">
+                    <button id="httpToggle" class="active" onclick="setTransport('http')">HTTP</button>
+                    <button id="wsToggle" onclick="setTransport('ws')">WebSocket</button>
+                </div>
+            </div>
+            <div class="status-indicator">
+                <span id="wsStatusText">WebSocket: Disconnected</span>
+                <div id="wsStatusDot" class="status-dot disconnected"></div>
+                <button class="btn btn-secondary" onclick="toggleWebSocket()" id="wsConnectBtn">Connect WS</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <h3>Methods</h3>
+
+                <div class="method-group">
+                    <h4>Chain Info</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_chainId')">qubic_chainId</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_clientVersion')">qubic_clientVersion</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_syncing')">qubic_syncing</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_status')">qubic_status</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getCurrentEpoch')">qubic_getCurrentEpoch</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Tick</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getTickNumber')">qubic_getTickNumber</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getTickByNumber')">qubic_getTickByNumber</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Transaction</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getTransactionByHash')">qubic_getTransactionByHash</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getTransactionReceipt')">qubic_getTransactionReceipt</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_broadcastTransaction')">qubic_broadcastTransaction</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_sendRawTransaction')">qubic_sendRawTransaction</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Balance & Transfer</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getBalance')">qubic_getBalance</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getTransfers')">qubic_getTransfers</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Assets</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAssetBalance')">qubic_getAssetBalance</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAssets')">qubic_getAssets</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Epoch</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getEpochInfo')">qubic_getEpochInfo</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getEndEpochLogs')">qubic_getEndEpochLogs</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Logs</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getLogs')">qubic_getLogs</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_findLogIds')">qubic_findLogIds</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getLogsByIdRange')">qubic_getLogsByIdRange</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Transfer History</h4>
+                    <button class="method-btn" onclick="selectMethod('qubic_getQuTransfers')">qubic_getQuTransfers</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAssetTransfers')">qubic_getAssetTransfers</button>
+                    <button class="method-btn" onclick="selectMethod('qubic_getAllAssetTransfers')">qubic_getAllAssetTransfers</button>
+                </div>
+
+                <div class="method-group">
+                    <h4>Subscriptions (WS only)</h4>
+                    <button class="method-btn ws-only" onclick="selectMethod('qubic_subscribe')">qubic_subscribe</button>
+                    <button class="method-btn ws-only" onclick="selectMethod('qubic_unsubscribe')">qubic_unsubscribe</button>
+                </div>
+            </aside>
+
+            <div class="workspace">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Request</h3>
+                        <span id="currentMethod" style="color: #00d4ff; font-family: monospace;">qubic_chainId</span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="method-info" id="methodInfo">
+                            <h4>qubic_chainId</h4>
+                            <p>Returns the chain ID of the Qubic network.</p>
+                        </div>
+
+                        <div class="params-form" id="paramsForm">
+                            <!-- Dynamic params will be inserted here -->
+                        </div>
+
+                        <div class="raw-request" id="rawRequest">
+                            {"jsonrpc":"2.0","method":"qubic_chainId","params":[],"id":1}
+                        </div>
+
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="sendRequest()">Send Request</button>
+                            <button class="btn btn-secondary" onclick="clearResponse()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel response-panel">
+                    <div class="panel-header">
+                        <h3>Response</h3>
+                        <span id="responseTime"></span>
+                    </div>
+                    <div class="panel-content">
+                        <div class="response-content" id="responseContent">
+                            <span style="color: #666;">// Response will appear here</span>
+                        </div>
+                        <div class="response-meta" id="responseMeta"></div>
+                    </div>
+                </div>
+
+                <div class="panel subscription-panel" id="subscriptionPanel" style="display: none;">
+                    <div class="panel-header">
+                        <h3>Active Subscriptions</h3>
+                        <button class="btn btn-secondary" onclick="clearSubscriptions()" style="padding: 5px 10px; font-size: 0.8rem;">Clear All</button>
+                    </div>
+                    <div class="panel-content">
+                        <div class="subscription-list" id="subscriptionList">
+                            <p style="color: #666; text-align: center; padding: 20px;">No active subscriptions</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" id="eventsPanel" style="display: none;">
+                    <div class="panel-header">
+                        <h3>Subscription Events</h3>
+                        <button class="btn btn-secondary" onclick="clearEvents()" style="padding: 5px 10px; font-size: 0.8rem;">Clear</button>
+                    </div>
+                    <div class="panel-content">
+                        <div class="events-log" id="eventsLog">
+                            <p style="color: #666; text-align: center;">Events will appear here</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel history-panel">
+                    <div class="panel-header">
+                        <h3>History</h3>
+                        <button class="btn btn-secondary" onclick="clearHistory()" style="padding: 5px 10px; font-size: 0.8rem;">Clear</button>
+                    </div>
+                    <div class="panel-content" style="padding: 0; max-height: 200px; overflow-y: auto;">
+                        <div id="historyList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentTransport = 'http';
+        let wsConnection = null;
+        let requestId = 1;
+        let subscriptions = {};
+        let history = [];
+        let selectedMethod = 'qubic_chainId';
+
+        // Method definitions
+        const methods = {
+            'qubic_chainId': {
+                description: 'Returns the chain ID of the Qubic network.',
+                params: []
+            },
+            'qubic_clientVersion': {
+                description: 'Returns the current client version.',
+                params: []
+            },
+            'qubic_syncing': {
+                description: 'Returns sync status of the node. Returns false if not syncing, or an object with sync progress.',
+                params: []
+            },
+            'qubic_getCurrentEpoch': {
+                description: 'Returns information about the current epoch.',
+                params: []
+            },
+            'qubic_getTickNumber': {
+                description: 'Returns the current tick number.',
+                params: []
+            },
+            'qubic_getTickByNumber': {
+                description: 'Returns tick information by tick number or tag.',
+                params: [
+                    { name: 'tickNumberOrTag', type: 'string', description: 'Tick number or "latest"', default: 'latest' },
+                    { name: 'includeTransactions', type: 'boolean', description: 'Include full transactions', default: false }
+                ]
+            },
+            'qubic_getTransactionByHash': {
+                description: 'Returns transaction details by hash.',
+                params: [
+                    { name: 'txHash', type: 'string', description: '60-char Qubic transaction hash', default: '' }
+                ]
+            },
+            'qubic_getTransactionReceipt': {
+                description: 'Returns transaction receipt including execution status and logs.',
+                params: [
+                    { name: 'txHash', type: 'string', description: '60-char Qubic transaction hash', default: '' }
+                ]
+            },
+            'qubic_broadcastTransaction': {
+                description: 'Broadcasts a signed transaction to the network.',
+                params: [
+                    { name: 'signedTx', type: 'string', description: 'Hex-encoded signed transaction (with or without 0x prefix)', default: '0x' }
+                ]
+            },
+            'qubic_sendRawTransaction': {
+                description: 'Alias for qubic_broadcastTransaction. Broadcasts a signed transaction.',
+                params: [
+                    { name: 'signedTx', type: 'string', description: 'Hex-encoded signed transaction', default: '0x' }
+                ]
+            },
+            'qubic_getBalance': {
+                description: 'Returns the balance of an identity.',
+                params: [
+                    { name: 'identity', type: 'string', description: '60-char Qubic identity (A-Z) or 0x-prefixed hex public key', default: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFXIB' }
+                ]
+            },
+            'qubic_getTransfers': {
+                description: 'Returns transfers matching the filter criteria.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter object with: identity, fromTick, toTick', default: '{"identity": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getAssetBalance': {
+                description: 'Returns the balance of a specific asset for an identity.',
+                params: [
+                    { name: 'identity', type: 'string', description: 'Owner identity', default: '' },
+                    { name: 'issuer', type: 'string', description: 'Asset issuer identity', default: '' },
+                    { name: 'assetName', type: 'string', description: 'Asset name (max 7 chars)', default: '' }
+                ]
+            },
+            'qubic_getAssets': {
+                description: 'Returns all assets owned by an identity.',
+                params: [
+                    { name: 'identity', type: 'string', description: '60-char Qubic identity', default: '' }
+                ]
+            },
+            'qubic_getLogs': {
+                description: 'Returns logs matching the filter criteria.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter object with: fromTick, toTick, scIndex, logType, topics', default: '{"fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_status': {
+                description: 'Returns full node status including version, uptime, epochs, ticks, and sync info.',
+                params: []
+            },
+            'qubic_getEpochInfo': {
+                description: 'Returns epoch information including tick range and log boundaries.',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' }
+                ]
+            },
+            'qubic_getEndEpochLogs': {
+                description: 'Returns end-of-epoch logs for the specified epoch.',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' }
+                ]
+            },
+            'qubic_findLogIds': {
+                description: 'Returns only log IDs matching the filter criteria (same as /findLog REST endpoint).',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: scIndex (required), logType (required), fromTick, toTick, topic1, topic2, topic3', default: '{"scIndex": 0, "logType": 0, "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getLogsByIdRange': {
+                description: 'Returns logs by ID range for a specific epoch (same as /log/{epoch}/{from}/{to}).',
+                params: [
+                    { name: 'epoch', type: 'number', description: 'Epoch number', default: '0' },
+                    { name: 'fromId', type: 'number', description: 'Starting log ID (inclusive)', default: '0' },
+                    { name: 'toId', type: 'number', description: 'Ending log ID (inclusive)', default: '100' }
+                ]
+            },
+            'qubic_getQuTransfers': {
+                description: 'Returns QU transfer history for an identity within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: identity (required), fromTick (required), toTick (required, max range 1000)', default: '{"identity": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getAssetTransfers': {
+                description: 'Returns asset transfer history for an identity within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: identity, issuer, assetName, fromTick, toTick (all required)', default: '{"identity": "", "issuer": "", "assetName": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_getAllAssetTransfers': {
+                description: 'Returns all transfers for a specific asset within a tick range.',
+                params: [
+                    { name: 'filter', type: 'object', description: 'Filter: issuer, assetName, fromTick, toTick (all required)', default: '{"issuer": "", "assetName": "", "fromTick": 0, "toTick": 0}' }
+                ]
+            },
+            'qubic_subscribe': {
+                description: 'Subscribe to events. WebSocket only.',
+                wsOnly: true,
+                params: [
+                    { name: 'subscriptionType', type: 'select', options: ['newTicks', 'logs', 'transfers', 'tickStream'], description: 'Type of subscription', default: 'newTicks' },
+                    { name: 'filterParams', type: 'object', description: 'Optional filter parameters (JSON object)', default: '{}' }
+                ]
+            },
+            'qubic_unsubscribe': {
+                description: 'Unsubscribe from events. WebSocket only.',
+                wsOnly: true,
+                params: [
+                    { name: 'subscriptionId', type: 'string', description: 'Subscription ID to cancel', default: '' }
+                ]
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            selectMethod('qubic_chainId');
+            updateRawRequest();
+        });
+
+        // Transport selection
+        function setTransport(transport) {
+            currentTransport = transport;
+            document.getElementById('httpToggle').className = transport === 'http' ? 'active' : '';
+            document.getElementById('wsToggle').className = transport === 'ws' ? 'ws-active' : '';
+
+            // Show/hide subscription panels
+            const subPanel = document.getElementById('subscriptionPanel');
+            const eventsPanel = document.getElementById('eventsPanel');
+            if (transport === 'ws') {
+                subPanel.style.display = 'block';
+                eventsPanel.style.display = 'block';
+            } else {
+                subPanel.style.display = 'none';
+                eventsPanel.style.display = 'none';
+            }
+        }
+
+        // WebSocket management
+        function toggleWebSocket() {
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+                wsConnection.close();
+            } else {
+                connectWebSocket();
+            }
+        }
+
+        function connectWebSocket() {
+            const host = document.getElementById('rpcHost').value;
+            const port = document.getElementById('rpcPort').value;
+            const url = `ws://${host}:${port}/ws/qubic`;
+
+            try {
+                wsConnection = new WebSocket(url);
+
+                wsConnection.onopen = () => {
+                    updateWsStatus(true);
+                    addEvent('system', 'WebSocket connected');
+                };
+
+                wsConnection.onclose = () => {
+                    updateWsStatus(false);
+                    addEvent('system', 'WebSocket disconnected');
+                    subscriptions = {};
+                    updateSubscriptionList();
+                };
+
+                wsConnection.onerror = (error) => {
+                    addEvent('error', 'WebSocket error: ' + error.message);
+                };
+
+                wsConnection.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        // Check if it's a subscription notification
+                        if (data.method === 'qubic_subscription') {
+                            addEvent(data.params.subscription, JSON.stringify(data.params.result, null, 2));
+                        } else {
+                            // Regular response - handled by sendRequest callback
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse WS message:', e);
+                    }
+                };
+            } catch (e) {
+                addEvent('error', 'Failed to connect: ' + e.message);
+            }
+        }
+
+        function updateWsStatus(connected) {
+            const dot = document.getElementById('wsStatusDot');
+            const text = document.getElementById('wsStatusText');
+            const btn = document.getElementById('wsConnectBtn');
+
+            if (connected) {
+                dot.className = 'status-dot connected';
+                text.textContent = 'WebSocket: Connected';
+                btn.textContent = 'Disconnect';
+            } else {
+                dot.className = 'status-dot disconnected';
+                text.textContent = 'WebSocket: Disconnected';
+                btn.textContent = 'Connect WS';
+            }
+        }
+
+        // Method selection
+        function selectMethod(method) {
+            selectedMethod = method;
+
+            // Update active button
+            document.querySelectorAll('.method-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent === method) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Update method info
+            const info = methods[method];
+            document.getElementById('currentMethod').textContent = method;
+            document.getElementById('methodInfo').innerHTML = `
+                <h4>${method}</h4>
+                <p>${info.description}</p>
+                ${info.wsOnly ? '<p style="color: #ff9900; margin-top: 8px;">WebSocket only</p>' : ''}
+            `;
+
+            // Build params form
+            const form = document.getElementById('paramsForm');
+            if (info.params.length === 0) {
+                form.innerHTML = '<p style="color: #666;">No parameters required</p>';
+            } else {
+                form.innerHTML = info.params.map((param, i) => {
+                    if (param.type === 'select') {
+                        return `
+                            <div class="param-field">
+                                <label>${param.name} <span>(${param.description})</span></label>
+                                <select id="param${i}" onchange="updateRawRequest()">
+                                    ${param.options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                                </select>
+                            </div>
+                        `;
+                    } else if (param.type === 'boolean') {
+                        return `
+                            <div class="param-field">
+                                <label>${param.name} <span>(${param.description})</span></label>
+                                <select id="param${i}" onchange="updateRawRequest()">
+                                    <option value="false">false</option>
+                                    <option value="true">true</option>
+                                </select>
+                            </div>
+                        `;
+                    } else if (param.type === 'object') {
+                        return `
+                            <div class="param-field">
+                                <label>${param.name} <span>(${param.description})</span></label>
+                                <textarea id="param${i}" onchange="updateRawRequest()" oninput="updateRawRequest()">${param.default}</textarea>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="param-field">
+                                <label>${param.name} <span>(${param.description})</span></label>
+                                <input type="text" id="param${i}" value="${param.default}" onchange="updateRawRequest()" oninput="updateRawRequest()">
+                            </div>
+                        `;
+                    }
+                }).join('');
+            }
+
+            updateRawRequest();
+        }
+
+        // Build request
+        function buildRequest() {
+            const info = methods[selectedMethod];
+            const params = [];
+
+            info.params.forEach((param, i) => {
+                const el = document.getElementById(`param${i}`);
+                if (el) {
+                    let value = el.value;
+                    if (param.type === 'boolean') {
+                        value = value === 'true';
+                    } else if (param.type === 'object') {
+                        try {
+                            value = JSON.parse(value);
+                        } catch (e) {
+                            value = {};
+                        }
+                    } else if (param.type === 'number') {
+                        value = parseInt(value, 10);
+                    }
+                    params.push(value);
+                }
+            });
+
+            return {
+                jsonrpc: '2.0',
+                method: selectedMethod,
+                params: params,
+                id: requestId
+            };
+        }
+
+        function updateRawRequest() {
+            const request = buildRequest();
+            document.getElementById('rawRequest').textContent = JSON.stringify(request, null, 2);
+        }
+
+        // Send request
+        async function sendRequest() {
+            const request = buildRequest();
+            const startTime = performance.now();
+
+            requestId++;
+
+            if (currentTransport === 'http') {
+                await sendHttpRequest(request, startTime);
+            } else {
+                await sendWsRequest(request, startTime);
+            }
+        }
+
+        async function sendHttpRequest(request, startTime) {
+            const host = document.getElementById('rpcHost').value;
+            const port = document.getElementById('rpcPort').value;
+            const url = `http://${host}:${port}/qubic`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(request)
+                });
+
+                const data = await response.json();
+                const elapsed = (performance.now() - startTime).toFixed(2);
+
+                displayResponse(data, elapsed, !data.error);
+                addToHistory(request.method, !data.error, elapsed);
+            } catch (e) {
+                displayResponse({ error: { message: e.message } }, 0, false);
+                addToHistory(request.method, false, 0);
+            }
+        }
+
+        async function sendWsRequest(request, startTime) {
+            if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+                displayResponse({ error: { message: 'WebSocket not connected' } }, 0, false);
+                return;
+            }
+
+            // Set up one-time message handler for this request
+            const responseHandler = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.id === request.id) {
+                        wsConnection.removeEventListener('message', responseHandler);
+                        const elapsed = (performance.now() - startTime).toFixed(2);
+                        displayResponse(data, elapsed, !data.error);
+                        addToHistory(request.method, !data.error, elapsed);
+
+                        // Handle subscription response
+                        if (request.method === 'qubic_subscribe' && data.result) {
+                            const subType = request.params[0];
+                            subscriptions[data.result] = subType;
+                            updateSubscriptionList();
+                        } else if (request.method === 'qubic_unsubscribe' && data.result === true) {
+                            const subId = request.params[0];
+                            delete subscriptions[subId];
+                            updateSubscriptionList();
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to parse response:', e);
+                }
+            };
+
+            wsConnection.addEventListener('message', responseHandler);
+            wsConnection.send(JSON.stringify(request));
+
+            // Timeout
+            setTimeout(() => {
+                wsConnection.removeEventListener('message', responseHandler);
+            }, 10000);
+        }
+
+        // Display response
+        function displayResponse(data, elapsed, success) {
+            const content = document.getElementById('responseContent');
+            const meta = document.getElementById('responseMeta');
+            const timeEl = document.getElementById('responseTime');
+
+            content.className = 'response-content ' + (success ? 'success' : 'error');
+            content.innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+
+            timeEl.textContent = elapsed > 0 ? `${elapsed}ms` : '';
+            meta.innerHTML = `
+                <span>Transport: ${currentTransport.toUpperCase()}</span>
+                <span>Status: ${success ? 'Success' : 'Error'}</span>
+            `;
+        }
+
+        function clearResponse() {
+            document.getElementById('responseContent').innerHTML = '<span style="color: #666;">// Response will appear here</span>';
+            document.getElementById('responseContent').className = 'response-content';
+            document.getElementById('responseMeta').innerHTML = '';
+            document.getElementById('responseTime').textContent = '';
+        }
+
+        // Syntax highlighting
+        function syntaxHighlight(json) {
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        // Subscriptions
+        function updateSubscriptionList() {
+            const list = document.getElementById('subscriptionList');
+            const entries = Object.entries(subscriptions);
+
+            if (entries.length === 0) {
+                list.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No active subscriptions</p>';
+            } else {
+                list.innerHTML = entries.map(([id, type]) => `
+                    <div class="subscription-item">
+                        <div>
+                            <div class="sub-id">${id}</div>
+                            <div class="sub-type">${type}</div>
+                        </div>
+                        <button onclick="unsubscribe('${id}')">Unsubscribe</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function unsubscribe(subId) {
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+                const request = {
+                    jsonrpc: '2.0',
+                    method: 'qubic_unsubscribe',
+                    params: [subId],
+                    id: requestId++
+                };
+                wsConnection.send(JSON.stringify(request));
+            }
+            delete subscriptions[subId];
+            updateSubscriptionList();
+        }
+
+        function clearSubscriptions() {
+            Object.keys(subscriptions).forEach(subId => unsubscribe(subId));
+        }
+
+        // Events log
+        function addEvent(type, message) {
+            const log = document.getElementById('eventsLog');
+            const time = new Date().toLocaleTimeString();
+
+            const item = document.createElement('div');
+            item.className = 'event-item';
+            item.innerHTML = `
+                <span class="event-time">${time}</span>
+                <span class="event-type">[${type}]</span>
+                <pre style="margin-top: 5px; color: #ccc; white-space: pre-wrap;">${message}</pre>
+            `;
+
+            if (log.querySelector('p')) {
+                log.innerHTML = '';
+            }
+
+            log.insertBefore(item, log.firstChild);
+
+            // Keep max 50 events
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        function clearEvents() {
+            document.getElementById('eventsLog').innerHTML = '<p style="color: #666; text-align: center;">Events will appear here</p>';
+        }
+
+        // History
+        function addToHistory(method, success, time) {
+            history.unshift({ method, success, time, timestamp: new Date() });
+            if (history.length > 50) history.pop();
+            updateHistoryList();
+        }
+
+        function updateHistoryList() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = history.map((item, i) => `
+                <div class="history-item" onclick="replayHistory(${i})">
+                    <div class="status ${item.success ? 'success' : 'error'}"></div>
+                    <span class="method">${item.method}</span>
+                    <span class="time">${item.time}ms</span>
+                </div>
+            `).join('');
+        }
+
+        function replayHistory(index) {
+            const item = history[index];
+            selectMethod(item.method);
+        }
+
+        function clearHistory() {
+            history = [];
+            document.getElementById('historyList').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

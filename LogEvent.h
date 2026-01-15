@@ -68,9 +68,9 @@ public:
     }
 
     template <typename T>
-    const T* getStruct()
+    const T* getStruct() const
     {
-        return (T*)getLogBodyPtr();
+        return (const T*)getLogBodyPtr();
     }
 
     // Returns the 24-bit body size encoded in the header (excluding the 26-byte header).
@@ -145,10 +145,11 @@ public:
         return 0;
     }
 
-    std::string parseToJsonWithExtraData(const TickData& td, const int txIndex);
-    std::string parseToJsonStr();
+    std::string parseToJsonWithExtraData(const TickData& td, const int txIndex) const;
+    Json::Value parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const;
+    std::string parseToJsonStr() const;
 private:
-    Json::Value parseToJson();
+    Json::Value parseToJson() const;
     // Map known event types to the minimum body size we expect for safe decoding.
     // Unknown types return 0 (no constraint here; callers should still be defensive).
     static constexpr uint32_t expectedMinBodySizeForType(uint32_t t) {
