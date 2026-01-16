@@ -58,6 +58,10 @@ KafkaProducer::~KafkaProducer() {
 }
 
 bool KafkaProducer::init(const KafkaConfig& config) {
+    Logger::get()->info("Kafka config: enabled={}, logs_enabled={}, txs_enabled={}, brokers={}, logs_topic={}, txs_topic={}, compression={}, batch_size={}, linger_ms={}",
+        config.enabled, config.logs_enabled, config.txs_enabled, config.brokers, config.logs_topic, config.txs_topic,
+        config.compression, config.batch_size, config.linger_ms);
+
     if (!config.enabled) {
         Logger::get()->info("Kafka producer is disabled");
         return true;
@@ -135,8 +139,10 @@ bool KafkaProducer::init(const KafkaConfig& config) {
     }
 
     enabled_ = true;
-    Logger::get()->info("Kafka producer initialized: brokers={}, logs_topic={}, txs_topic={}",
-                       config.brokers, config.logs_topic, config.txs_topic);
+    logsEnabled_ = config.logs_enabled;
+    txsEnabled_ = config.txs_enabled;
+    Logger::get()->info("Kafka producer initialized: brokers={}, logs_topic={}, txs_topic={}, logs_enabled={}, txs_enabled={}",
+                       config.brokers, config.logs_topic, config.txs_topic, config.logs_enabled, config.txs_enabled);
     return true;
 }
 
@@ -176,7 +182,7 @@ void KafkaProducer::shutdown() {
 }
 
 void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& logKey, uint64_t timestamp) {
-    if (!enabled_.load() || !producer_ || !logsTopic_) return;
+    if (!logsEnabled_.load() || !producer_ || !logsTopic_) return;
     (void)timestamp; // Reserved for future use
 
     // Use logKey (epoch:logId) as the message key for partitioning and deduplication
@@ -220,7 +226,7 @@ void KafkaProducer::sendLog(const std::string& parsedJson, const std::string& lo
 }
 
 void KafkaProducer::sendTransaction(const std::string& txJson, const std::string& txHash) {
-    if (!enabled_.load() || !producer_ || !txsTopic_) return;
+    if (!txsEnabled_.load() || !producer_ || !txsTopic_) return;
 
     // Use txHash as the message key for partitioning and deduplication
     int result = rd_kafka_produce(
