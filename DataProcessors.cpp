@@ -473,7 +473,7 @@ void RequestProcessorThread(std::atomic_bool& exitFlag)
     while (!exitFlag.load())
     {
         uint32_t packet_size = 0;
-        if (MRB_Request.TryGetPacket(buf.data(), packet_size))
+        if (!MRB_Request.TryGetPacket(buf.data(), packet_size))
         {
             SLEEP(10);
             continue;
