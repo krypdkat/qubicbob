@@ -247,3 +247,13 @@ std::string LogEvent::parseToJsonWithExtraData(const TickData& td, const int txI
     wb["indentation"] = "";
     return Json::writeString(wb, root);
 }
+
+std::string LogEvent::parseToJsonForEndEpoch(uint32_t endEpochTick, const std::string& timestamp) const
+{
+    auto root = parseToJson();
+    root["timestamp"] = timestamp;
+    root["txHash"] = "SC_END_EPOCH_TX_" + std::to_string(endEpochTick);
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, root);
+}

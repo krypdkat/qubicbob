@@ -139,10 +139,25 @@ std::string bobGetEndEpochLog(uint16_t epoch)
         return "{\"error\": \"bob doesn't have enough info\"}";
     }
     end = start + length - 1;
+
+    // Get end epoch tick and timestamp from the last real tick
+    uint32_t endEpochTick = 0;
+    db_get_u32("end_epoch_tick:" + std::to_string(epoch), endEpochTick);
+    std::string timestamp;
+    if (endEpochTick > 0) {
+        TickData td{0};
+        if (db_try_get_tick_data(endEpochTick - 1, td)) {
+            char timestampBuffer[20];
+            snprintf(timestampBuffer, sizeof(timestampBuffer), "%02d-%02d-%02d %02d:%02d:%02d",
+                     td.year, td.month, td.day, td.hour, td.minute, td.second);
+            timestamp = timestampBuffer;
+        }
+    }
+
     for (int64_t id = start; id <= end; ++id) {
         LogEvent log;
         if (db_try_get_log(epoch, static_cast<uint64_t>(id), log)) {
-            std::string js = log.parseToJsonStr();
+            std::string js = log.parseToJsonForEndEpoch(endEpochTick, timestamp);
             if (!first) result.push_back(',');
             result += js;
             first = false;

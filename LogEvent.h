@@ -148,6 +148,7 @@ public:
     std::string parseToJsonWithExtraData(const TickData& td, const int txIndex) const;
     Json::Value parseToJsonValueWithExtraData(const TickData& td, const int txIndex) const;
     std::string parseToJsonStr() const;
+    std::string parseToJsonForEndEpoch(uint32_t endEpochTick, const std::string& timestamp) const;
 private:
     Json::Value parseToJson() const;
     // Map known event types to the minimum body size we expect for safe decoding.
