@@ -147,7 +147,7 @@ std::string bobGetEndEpochLog(uint16_t epoch)
     if (endEpochTick > 0) {
         TickData td{0};
         if (db_try_get_tick_data(endEpochTick - 1, td)) {
-            char timestampBuffer[20];
+            char timestampBuffer[32];
             snprintf(timestampBuffer, sizeof(timestampBuffer), "%02d-%02d-%02d %02d:%02d:%02d",
                      td.year, td.month, td.day, td.hour, td.minute, td.second);
             timestamp = timestampBuffer;
