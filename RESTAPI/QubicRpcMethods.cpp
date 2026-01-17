@@ -1226,3 +1226,33 @@ Json::Value QubicRpcMethods::querySmartContract(const Json::Value& params) {
     result["error"] = "Unknown error";
     return result;
 }
+
+// ============================================================================
+// Computor Methods
+// ============================================================================
+
+Json::Value QubicRpcMethods::getComputors(uint16_t epoch) {
+    Json::Value result;
+
+    Computors comps{};
+
+    // For current epoch, use in-memory computorsList if available
+    if (epoch == gCurrentProcessingEpoch.load() && computorsList.epoch == epoch) {
+        comps = computorsList;
+    } else if (!db_get_computors(epoch, comps)) {
+        result["error"] = "Computor list not found for epoch " + std::to_string(epoch);
+        return result;
+    }
+
+    result["epoch"] = comps.epoch;
+
+    Json::Value computorsArray(Json::arrayValue);
+    char identity[61];
+    for (int i = 0; i < NUMBER_OF_COMPUTORS; i++) {
+        getIdentityFromPublicKey(comps.publicKeys[i].m256i_u8, identity, false);
+        computorsArray.append(std::string(identity));
+    }
+    result["computors"] = computorsArray;
+
+    return result;
+}

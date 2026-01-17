@@ -2,6 +2,7 @@
 #include "QubicRpcMethods.h"
 #include "QubicRpcMapper.h"
 #include "Logger.h"
+#include "shim.h"
 
 namespace QubicRpcHandler {
 
@@ -237,6 +238,13 @@ Json::Value dispatchCommonMethod(const Json::Value& id,
                 return makeError(id, QubicRpcError::INVALID_PARAMS, "Epoch must be a number");
             }
             return makeResult(id, QubicRpcMethods::getEndEpochLogs(params[0].asUInt()));
+        }
+        if (method == "qubic_getComputors") {
+            uint16_t epoch = gCurrentProcessingEpoch.load();
+            if (params.isArray() && params.size() >= 1 && params[0].isNumeric()) {
+                epoch = static_cast<uint16_t>(params[0].asUInt());
+            }
+            return makeResult(id, QubicRpcMethods::getComputors(epoch));
         }
 
         // ====================================================================

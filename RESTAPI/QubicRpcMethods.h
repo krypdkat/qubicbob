@@ -122,6 +122,11 @@ public:
     // @param epoch: epoch number
     static Json::Value getEndEpochLogs(uint16_t epoch);
 
+    // qubic_getComputors - Returns computor list for an epoch
+    // @param epoch: epoch number (optional, defaults to current epoch)
+    // Returns: { "epoch": ..., "computors": [...identities] }
+    static Json::Value getComputors(uint16_t epoch);
+
     // ========================================================================
     // Transfer History Methods
     // ========================================================================
