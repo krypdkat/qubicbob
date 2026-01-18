@@ -60,7 +60,13 @@ static void indexTick(uint32_t tick, const TickData &td) {
             LogEvent firstEvent;
             bool isExecuted = false;
             if (logrange.length[i] > 0) {
-                db_try_get_log(td.epoch, logrange.fromLogId[i], firstEvent);
+                if (!db_try_get_log(td.epoch, logrange.fromLogId[i], firstEvent))
+                {
+                    Logger::get()->critical("Failed to index data for tick {}. Malformed database."
+                                            "You need to force bob to reverified and reindex DB with command:"
+                                            "hdel db_status latest_verified_tick and hdel db_status last_indexed_tick", tick);
+                    exit(1);
+                }
                 if (firstEvent.getType() == QU_TRANSFER) { // QuTransfer type
                     QuTransfer transfer{};
                     memcpy((void*)&transfer, firstEvent.getLogBodyPtr(), sizeof(QuTransfer));
