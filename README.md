@@ -9,8 +9,15 @@
 Install dependencies and necessary tools to operate bob:
 ```
 sudo apt-get update;
-apt install vim net-tools tmux cmake git libjsoncpp-dev build-essential cmake uuid-dev libhiredis-dev zlib1g-dev unzip -y;
+apt install vim net-tools tmux cmake git libjsoncpp-dev build-essential cmake uuid-dev libhiredis-dev zlib1g-dev unzip pkg-config -y;
 ```
+
+### Optional: Kafka Support
+To enable streaming logs and transactions to Kafka, install librdkafka:
+```
+apt install librdkafka-dev -y;
+```
+**Note:** `pkg-config` is required for cmake to detect librdkafka. Without it, Kafka support will be silently disabled.
 
 ### BUILD
 
@@ -68,7 +75,7 @@ For the trusted-node field, the expected format is `NODE_IP:NODE_PORT:PASSCODE_L
 All in one batch file for the lazy:
 ```
 apt update && apt upgrade -y;
-apt install vim net-tools tmux cmake git libjsoncpp-dev build-essential cmake uuid-dev libhiredis-dev zlib1g-dev unzip -y;
+apt install vim net-tools tmux cmake git libjsoncpp-dev build-essential cmake uuid-dev libhiredis-dev zlib1g-dev unzip pkg-config librdkafka-dev -y;
 git clone https://github.com/krypdkat/qubicbob.git;
 cd qubicbob;
 mkdir build;

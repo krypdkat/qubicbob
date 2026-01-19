@@ -33,6 +33,12 @@ public:
     // Check if the Kafka producer is enabled and initialized
     bool isEnabled() const { return enabled_.load(); }
 
+    // Check if logs sending is enabled
+    bool isLogsEnabled() const { return logsEnabled_.load(); }
+
+    // Check if transactions sending is enabled
+    bool isTxsEnabled() const { return txsEnabled_.load(); }
+
     // Poll for events (call periodically to handle callbacks)
     void poll(int timeout_ms = 0);
 
@@ -46,6 +52,8 @@ private:
     rd_kafka_topic_t* logsTopic_ = nullptr;
     rd_kafka_topic_t* txsTopic_ = nullptr;
     std::atomic<bool> enabled_{false};
+    std::atomic<bool> logsEnabled_{false};
+    std::atomic<bool> txsEnabled_{false};
     std::atomic<uint64_t> messagesSent_{0};
     std::atomic<uint64_t> messagesDelivered_{0};
     std::atomic<uint64_t> messagesFailed_{0};

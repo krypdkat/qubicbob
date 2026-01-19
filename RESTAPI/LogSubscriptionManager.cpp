@@ -268,6 +268,7 @@ void LogSubscriptionManager::pushVerifiedLogs(uint32_t tick, uint16_t epoch, con
         }
         // Poll to handle delivery reports
         KafkaProducer::instance().poll(0);
+        Logger::get()->info("Kafka: sent {} logs for tick {}", logs.size(), tick);
     }
 #endif
 

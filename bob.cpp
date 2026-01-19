@@ -132,14 +132,22 @@ int runBob(int argc, char *argv[])
     }
     startRESTServer();
 
+    // Log Kafka compile-time and runtime status
 #ifdef KAFKA_ENABLED
+    Logger::get()->info("Kafka support: COMPILED IN (KAFKA_ENABLED=1)");
+    Logger::get()->info("Kafka config enabled: {}", cfg.kafka.enabled);
     // Initialize Kafka producer if enabled
     if (cfg.kafka.enabled) {
         if (!KafkaProducer::instance().init(cfg.kafka)) {
             Logger::get()->error("Failed to initialize Kafka producer");
             // Non-fatal - continue without Kafka
         }
+    } else {
+        Logger::get()->info("Kafka producer disabled in config");
     }
+#else
+    Logger::get()->info("Kafka support: NOT COMPILED (librdkafka not found during build)");
+    (void)cfg.kafka; // Silence unused warning
 #endif
 
     if (gTickStorageMode == TickStorageMode::Kvrocks)

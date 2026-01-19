@@ -362,6 +362,22 @@ bool LoadConfig(const std::string& path, AppConfig& out, std::string& error) {
             out.kafka.enabled = kafka["enabled"].asBool();
         }
 
+        if (kafka.isMember("logs-enabled")) {
+            if (!kafka["logs-enabled"].isBool()) {
+                error = "Invalid type: boolean required for key 'kafka.logs-enabled'";
+                return false;
+            }
+            out.kafka.logs_enabled = kafka["logs-enabled"].asBool();
+        }
+
+        if (kafka.isMember("txs-enabled")) {
+            if (!kafka["txs-enabled"].isBool()) {
+                error = "Invalid type: boolean required for key 'kafka.txs-enabled'";
+                return false;
+            }
+            out.kafka.txs_enabled = kafka["txs-enabled"].asBool();
+        }
+
         if (kafka.isMember("brokers")) {
             if (!kafka["brokers"].isString()) {
                 error = "Invalid type: string required for key 'kafka.brokers'";

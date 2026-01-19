@@ -21,6 +21,9 @@
 #include <future>
 #include "RESTAPI/LogSubscriptionManager.h"
 #include "RESTAPI/QubicSubscriptionManager.h"
+#ifdef KAFKA_ENABLED
+#include "KafkaProducer.h"
+#endif
 
 using namespace std::chrono_literals;
 extern "C" {
@@ -773,12 +776,18 @@ verifyNodeStateDigest:
             }
 
             // Push verified logs to WebSocket subscribers (for logs/transfers subscriptions)
+            // and/or to Kafka if enabled
             // Note: tickStream subscriptions are notified from QubicIndexer after indexing
             // Wrapped in try-catch to ensure log verification continues even if notification fails
             bool hasLogSubClients = LogSubscriptionManager::instance().getClientCount() > 0;
             bool hasQubicSubClients = QubicSubscriptionManager::instance().getClientCount() > 0;
+#ifdef KAFKA_ENABLED
+            bool kafkaLogsEnabled = KafkaProducer::instance().isLogsEnabled();
+#else
+            bool kafkaLogsEnabled = false;
+#endif
 
-            if (hasLogSubClients || hasQubicSubClients) {
+            if (hasLogSubClients || hasQubicSubClients || kafkaLogsEnabled) {
                 try {
                     if (!vle.empty()) {
                         // Group logs by tick for proper ordering

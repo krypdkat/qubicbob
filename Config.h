@@ -20,6 +20,8 @@ enum class TxStorageMode {
 // Kafka configuration (optional feature)
 struct KafkaConfig {
     bool enabled = false;
+    bool logs_enabled = true;         // enable sending logs to Kafka (when kafka enabled)
+    bool txs_enabled = true;          // enable sending transactions to Kafka (when kafka enabled)
     std::string brokers = "localhost:9092";
     std::string logs_topic = "qubic-logs";
     std::string txs_topic = "qubic-txs";
