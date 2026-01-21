@@ -292,6 +292,8 @@ void indexVerifiedTicks(std::atomic_bool& stopFlag)
     long long lastIndexed = -1;
     lastIndexed = db_get_last_indexed_tick();
     if (lastIndexed == -1) lastIndexed = gInitialTick.load() - 1;
+    // users opt to skip the last part of previous epoch
+    if (lastIndexed < gInitialTick.load() - 1) lastIndexed = gInitialTick.load() - 1;
     gCurrentIndexingTick = lastIndexed;
     Logger::get()->info("QubicIndexer: starting at last_indexed_tick={}", lastIndexed);
 
