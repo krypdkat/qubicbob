@@ -87,7 +87,7 @@ Json::Value LogEvent::parseToJson() const
                 body["issuerPublicKey"] = a->issuerPublicKey.toQubicHashUpperCase();
                 body["numberOfShares"] = Json::Int64(a->numberOfShares);
                 body["managingContractIndex"] = Json::Int64(a->managingContractIndex);
-                body["name"] = std::string(a->name, 7);
+                body["name"] = trim_zero_bytes(a->name, 7);
                 body["numberOfDecimalPlaces"] = static_cast<int>(a->numberOfDecimalPlaces);
                 char unitOfMeasurement[7];
                 for (int i = 0; i < 7; i++) unitOfMeasurement[i] = 48 +  a->unitOfMeasurement[i];
