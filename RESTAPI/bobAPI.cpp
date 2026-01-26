@@ -519,6 +519,7 @@ std::string bobGetExtraStatus()
     KangarooTwelve((uint8_t *) &data, sizeof(data), hash, 32);
     uint8_t signature[64];
     sign(nodeSubseed.m256i_u8, nodePublickey.m256i_u8, hash, signature);
+    root["messageHex"] = byteToHexStr((const uint8_t*)&data, sizeof(data));
     root["signature"] = byteToHexStr(signature, 64);
     Json::FastWriter writer;
     return writer.write(root);
