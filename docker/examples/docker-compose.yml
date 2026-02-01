@@ -1,69 +1,25 @@
-# Docker Compose for qubic-bob with external KeyDB and Kvrocks
-# Image: j0et0m/qubic-bob:prod
+# Docker Compose for Qubic Bob (includes Redis and Kvrocks)
+# Image: qubiccore/bob:latest
 
 services:
   qubic-bob:
-    image: j0et0m/qubic-bob:prod
+    image: qubiccore/bob:latest
     container_name: qubic-bob
     restart: unless-stopped
     ports:
       - "21842:21842"
       - "40420:40420"
     volumes:
-      - ./bob.json:/app/config/bob.json:ro
+      # - ./bob.json:/app/bob.json:ro # if needed you can use a custom configuration
+      # - ./redis.conf:/etc/redis/redis.conf:ro # custom Redis config (e.g., to increase maxmemory beyond default 4GB)
+      - qubic-bob-redis:/data/redis
+      - qubic-bob-kvrocks:/data/kvrocks
       - qubic-bob-data:/data/bob
-    depends_on:
-      keydb:
-        condition: service_healthy
-      kvrocks:
-        condition: service_healthy
-    networks:
-      - qubic-bob-network
-
-  keydb:
-    image: eqalpha/keydb:latest
-    container_name: qubic-bob-keydb
-    restart: unless-stopped
-    command: keydb-server /etc/keydb/keydb.conf
-    volumes:
-      - qubic-bob-keydb-data:/data
-      - ./keydb.conf:/etc/keydb/keydb.conf:ro
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "keydb-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - qubic-bob-network
-
-  kvrocks:
-    image: apache/kvrocks:latest
-    container_name: qubic-bob-kvrocks
-    restart: unless-stopped
-    command: kvrocks -c /var/lib/kvrocks/kvrocks.conf
-    volumes:
-      - qubic-bob-kvrocks-data:/var/lib/kvrocks
-      - ./kvrocks.conf:/var/lib/kvrocks/kvrocks.conf:ro
-    ports:
-      - "6666:6666"
-    healthcheck:
-      test: ["CMD", "redis-cli", "-p", "6666", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - qubic-bob-network
 
 volumes:
-  qubic-bob-keydb-data:
+  qubic-bob-redis:
     driver: local
-  qubic-bob-kvrocks-data:
+  qubic-bob-kvrocks:
     driver: local
   qubic-bob-data:
     driver: local
-
-networks:
-  qubic-bob-network:
-    driver: bridge

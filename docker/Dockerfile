@@ -69,10 +69,10 @@ COPY --from=kvrocks-builder /build/kvrocks/build/kvrocks /usr/local/bin/kvrocks
 RUN mkdir -p /data/redis /data/kvrocks /data/bob /app/logs /etc/kvrocks
 
 # Copy config templates
-COPY docker/standalone/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY docker/standalone/redis.conf /etc/redis/redis.conf
-COPY docker/standalone/kvrocks.conf /etc/kvrocks/kvrocks.conf
-COPY docker/standalone/bob.json /app/bob.json
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/redis.conf /etc/redis/redis.conf
+COPY docker/kvrocks.conf /etc/kvrocks/kvrocks.conf
+COPY docker/bob.json /app/bob.json
 
 # Expose ports
 # 21842 - bob server port

@@ -15,7 +15,7 @@ docker run -d --name qubic-bob \
   -v qubic-bob-redis:/data/redis \
   -v qubic-bob-kvrocks:/data/kvrocks \
   -v qubic-bob-data:/data/bob \
-  j0et0m/qubic-bob-standalone:prod
+  qubiccore/bob:latest
 ```
 
 ### With Docker Compose
@@ -23,7 +23,7 @@ docker run -d --name qubic-bob \
 ```yaml
 services:
   qubic-bob:
-    image: j0et0m/qubic-bob-standalone:prod
+    image: qubiccore/bob:latest
     ports:
       - "21842:21842"
       - "40420:40420"
@@ -42,8 +42,9 @@ volumes:
 
 | Tag | Description |
 |-----|-------------|
-| `prod`, `latest` | Production release |
-| `v1.2.0` | Specific version |
+| `latest` | Latest stable release |
+| `vX.Y.Z` (e.g. `v1.2.0`) | Pinned version |
+| `nightly` | Daily build from master |
 
 ## JSON-RPC API
 
@@ -102,7 +103,7 @@ Real-time data streaming via WebSocket:
 
 | Path | Description |
 |------|-------------|
-| `/data/redis` | Redis persistence (standalone only) |
+| `/data/redis` | Redis persistence |
 | `/data/kvrocks` | Kvrocks persistence |
 | `/data/bob` | Bob snapshot files |
 
@@ -118,7 +119,7 @@ docker run -d --name qubic-bob \
   -v qubic-bob-redis:/data/redis \
   -v qubic-bob-kvrocks:/data/kvrocks \
   -v qubic-bob-data:/data/bob \
-  j0et0m/qubic-bob-standalone:prod
+  qubiccore/bob:latest
 ```
 
 ### bob.json Options
