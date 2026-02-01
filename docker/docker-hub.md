@@ -150,6 +150,6 @@ docker run -d --name qubic-bob \
 
 ## Links
 
-- [GitHub Repository](https://github.com/krypdkat/qubicbob)
-- [JSON-RPC API Guide](https://github.com/krypdkat/qubicbob/blob/ac34dd0de9fb20835bb0aa9fb72464d8ae46dc56/QUBIC_API_GUIDE.md)
+- [GitHub Repository](https://github.com/qubic/core-bob)
+- [JSON-RPC API Guide](https://github.com/qubic/core-bob/QUBIC_JSON_RPC.md)
 - [RPC Playground](https://gistpreview.github.io/?6912d613bc27ae75126859447fca8acf)
