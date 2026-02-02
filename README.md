@@ -1,3 +1,6 @@
+# (This repo is now archived, visit official link for the latest code)
+(Link: https://github.com/qubic/core-bob/tree/master)
+
 # Qubic Bob
 
 A high-performance indexer for the **Qubic blockchain network**. Bob syncs tick data, verifies integrity via logging events, indexes blockchain data, and exposes it through an Ethereum-style **JSON-RPC 2.0** API (HTTP & WebSocket) and a REST API.
